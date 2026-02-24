@@ -27,12 +27,11 @@ SERVER_IP="$(get_server_ip)"
 start_service() {
     local name=$1
     local port=$2
-    local path=$3
+    local module=$3
     
     echo "Starting $name on port $port..."
-    cd "$path" || exit
-    uvicorn main:app --host 0.0.0.0 --port "$port" --reload > "../../logs/${name,,}.log" 2>&1 &
-    cd - || exit
+    # Важно: запускаем из корня backend_fastapi, чтобы работали импорты пакета `services.*`
+    PYTHONPATH="$(pwd)" uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${name,,}.log" 2>&1 &
     sleep 1
 }
 
@@ -40,14 +39,14 @@ start_service() {
 mkdir -p logs
 
 # Запуск всех сервисов
-start_service "Authentication" 8001 "services/authentication"
-start_service "Client" 8002 "services/client_service"
-start_service "Company" 8003 "services/company_service"
-start_service "Category" 8004 "services/category_service"
-start_service "Ordering" 8005 "services/ordering"
-start_service "Chat" 8006 "services/chat"
-start_service "Review" 8007 "services/review_service"
-start_service "File" 8008 "services/file_service"
+start_service "Authentication" 8001 "services.authentication.main"
+start_service "Client" 8002 "services.client_service.main"
+start_service "Company" 8003 "services.company_service.main"
+start_service "Category" 8004 "services.category_service.main"
+start_service "Ordering" 8005 "services.ordering.main"
+start_service "Chat" 8006 "services.chat.main"
+start_service "Review" 8007 "services.review_service.main"
+start_service "File" 8008 "services.file_service.main"
 
 echo ""
 echo "All services started!"
