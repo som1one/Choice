@@ -3,6 +3,26 @@
 echo "Starting all FastAPI services..."
 echo ""
 
+# Определить внешний IPv4 адрес сервера (для вывода ссылок)
+get_server_ip() {
+    local ip_addr
+    ip_addr=$(hostname -I 2>/dev/null | awk '{print $1}')
+    if [[ -n "$ip_addr" ]]; then
+        echo "$ip_addr"
+        return 0
+    fi
+
+    ip_addr=$(ip -4 route get 1.1.1.1 2>/dev/null | awk '{for (i=1;i<=NF;i++) if ($i=="src") {print $(i+1); exit}}')
+    if [[ -n "$ip_addr" ]]; then
+        echo "$ip_addr"
+        return 0
+    fi
+
+    echo "127.0.0.1"
+}
+
+SERVER_IP="$(get_server_ip)"
+
 # Функция для запуска сервиса
 start_service() {
     local name=$1
@@ -33,14 +53,14 @@ echo ""
 echo "All services started!"
 echo ""
 echo "Check Swagger UI:"
-echo "- Authentication: http://localhost:8001/docs"
-echo "- Client: http://localhost:8002/docs"
-echo "- Company: http://localhost:8003/docs"
-echo "- Category: http://localhost:8004/docs"
-echo "- Ordering: http://localhost:8005/docs"
-echo "- Chat: http://localhost:8006/docs"
-echo "- Review: http://localhost:8007/docs"
-echo "- File: http://localhost:8008/docs"
+echo "- Authentication: http://${SERVER_IP}:8001/docs"
+echo "- Client: http://${SERVER_IP}:8002/docs"
+echo "- Company: http://${SERVER_IP}:8003/docs"
+echo "- Category: http://${SERVER_IP}:8004/docs"
+echo "- Ordering: http://${SERVER_IP}:8005/docs"
+echo "- Chat: http://${SERVER_IP}:8006/docs"
+echo "- Review: http://${SERVER_IP}:8007/docs"
+echo "- File: http://${SERVER_IP}:8008/docs"
 echo ""
 echo "Logs are in logs/ directory"
 echo ""
