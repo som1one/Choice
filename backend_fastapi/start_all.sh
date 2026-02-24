@@ -23,6 +23,19 @@ get_server_ip() {
 
 SERVER_IP="$(get_server_ip)"
 
+# Выбрать Python (предпочтительно из .venv), чтобы не зависеть от PATH/активации venv
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+if [[ -x "$(pwd)/.venv/bin/python" ]]; then
+    PYTHON_BIN="$(pwd)/.venv/bin/python"
+fi
+
+# Проверка, что uvicorn установлен
+if ! "$PYTHON_BIN" -c "import uvicorn" >/dev/null 2>&1; then
+    echo "ERROR: uvicorn не установлен в окружении ($PYTHON_BIN)."
+    echo "Запусти: python3 -m venv .venv && source .venv/bin/activate && pip install -r requirements.txt"
+    exit 1
+fi
+
 # Функция для запуска сервиса
 start_service() {
     local name=$1
@@ -31,7 +44,7 @@ start_service() {
     
     echo "Starting $name on port $port..."
     # Важно: запускаем из корня backend_fastapi, чтобы работали импорты пакета `services.*`
-    PYTHONPATH="$(pwd)" uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${name,,}.log" 2>&1 &
+    PYTHONPATH="$(pwd)" "$PYTHON_BIN" -m uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${name,,}.log" 2>&1 &
     sleep 1
 }
 
