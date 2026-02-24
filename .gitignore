@@ -1,0 +1,89 @@
+# Общие
+.DS_Store
+Thumbs.db
+*.log
+*.tmp
+*.swp
+*.swo
+*.bak
+*.rar
+*.7z
+*.zip
+
+# Secrets
+.env
+.env.*
+**/.env
+**/.env.*
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.venv/
+venv/
+env/
+
+# FastAPI (этот репозиторий содержит локальный venv)
+backend_fastapi/venv/
+backend_fastapi/logs/
+
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+build/
+**/build/
+
+# Android/Gradle (flutter)
+**/.gradle/
+**/gradle-wrapper.jar
+**/local.properties
+**/key.properties
+**/*.jks
+**/*.keystore
+
+# iOS/macOS (flutter)
+**/Pods/
+**/.symlinks/
+**/Flutter/ephemeral/
+**/.xcode.env
+
+# Node / Web
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.next/
+dist/
+out/
+
+# Mobile secrets / keys
+**/google-services.json
+**/debug.keystore
+**/*.keystore
+**/*.jks
+**/key.properties
+
+# .NET / Visual Studio (на случай артефактов)
+**/bin/
+**/obj/
+**/.vs/
+**/*.user
+**/*.suo
+**/*.cache
+**/*.dll
+**/*.exe
+
+# Очень тяжёлая legacy-папка (если нужна — убери эту строку)
+services/
+

@@ -1,0 +1,33 @@
+# FastAPI и сервер
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+
+# База данных
+sqlalchemy>=2.0.36
+alembic==1.13.1
+psycopg2-binary>=2.9.9
+# pymssql==2.2.11  # Не поддерживает Python 3.13, используйте pyodbc для SQL Server
+# pyodbc>=5.0.0  # Альтернатива для SQL Server (требует драйвер ODBC)
+
+# Аутентификация
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+
+# Валидация
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+email-validator>=2.2.0
+
+# RabbitMQ
+aio-pika==9.3.0
+
+# HTTP клиент
+httpx==0.26.0
+
+# SMS (Vonage)
+vonage==3.14.0
+
+# Утилиты
+python-dateutil==2.8.2
