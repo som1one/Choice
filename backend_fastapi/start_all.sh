@@ -11,12 +11,12 @@ start_service() {
     
     echo "Starting $name on port $port..."
     cd "$path" || exit
-    uvicorn main:app --port "$port" --reload > "../logs/${name,,}.log" 2>&1 &
+    uvicorn main:app --host 0.0.0.0 --port "$port" --reload > "../../logs/${name,,}.log" 2>&1 &
     cd - || exit
     sleep 1
 }
 
-# Создать директорию для логов
+# Создать директорию для логов (в backend_fastapi/logs)
 mkdir -p logs
 
 # Запуск всех сервисов
