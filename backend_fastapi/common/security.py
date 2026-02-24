@@ -6,10 +6,12 @@ from passlib.context import CryptContext
 from pydantic_settings import BaseSettings
 
 class JWTSettings(BaseSettings):
-    jwt_secret_key: str
+    # Дефолты нужны, чтобы сервисы поднимались "из коробки" на пустом сервере.
+    # В ПРОДЕ обязательно переопредели через .env/ENV (JWT_SECRET_KEY, JWT_ISSUER, JWT_AUDIENCE).
+    jwt_secret_key: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
-    jwt_issuer: str
-    jwt_audience: str
+    jwt_issuer: str = "choice"
+    jwt_audience: str = "choice-users"
     jwt_access_token_expire_minutes: int = 1440
     
     class Config:
