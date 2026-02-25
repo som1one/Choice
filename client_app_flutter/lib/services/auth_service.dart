@@ -92,6 +92,8 @@ class AuthService {
     required String email,
     required String password,
     required String city,
+    required String street,
+    required String phoneNumber,
   }) async {
     String? remoteToken;
     if (ApiConfig.isConfigured) {
@@ -100,6 +102,8 @@ class AuthService {
         email: email,
         password: password,
         city: city,
+        street: street,
+        phoneNumber: phoneNumber,
       );
       if (remoteResult != null && !remoteResult.success) {
         return;
@@ -113,6 +117,8 @@ class AuthService {
       'email': email.trim().toLowerCase(),
       'password': _hashPassword(password),
       'city': city,
+      'street': street.trim(),
+      'phoneNumber': phoneNumber.trim(),
     });
     await prefs.setString(_clientCredentialsKey, payload);
     if (remoteToken != null && remoteToken.isNotEmpty) {
@@ -187,6 +193,9 @@ class AuthService {
     required String inn,
     required String email,
     required String password,
+    required String city,
+    required String street,
+    required String phoneNumber,
   }) async {
     String? remoteToken;
     if (ApiConfig.isConfigured) {
@@ -195,6 +204,9 @@ class AuthService {
         inn: inn,
         email: email,
         password: password,
+        city: city,
+        street: street,
+        phoneNumber: phoneNumber,
       );
       if (remoteResult != null && !remoteResult.success) {
         return;
@@ -208,6 +220,9 @@ class AuthService {
       'inn': inn.trim(),
       'email': email.trim().toLowerCase(),
       'password': _hashPassword(password),
+      'city': city.trim(),
+      'street': street.trim(),
+      'phoneNumber': phoneNumber.trim(),
     });
     await prefs.setString(_companyCredentialsKey, payload);
     if (remoteToken != null && remoteToken.isNotEmpty) {

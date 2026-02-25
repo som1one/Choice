@@ -18,6 +18,8 @@ class ClientRegistrationScreen extends StatefulWidget {
 class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _streetController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
   
@@ -46,6 +48,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     // Добавляем слушатели для отслеживания изменений
     _nameController.addListener(_onFieldChanged);
     _emailController.addListener(_onFieldChanged);
+    _phoneController.addListener(_onFieldChanged);
+    _streetController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
     _confirmPasswordController.addListener(_onFieldChanged);
   }
@@ -57,6 +61,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   bool _areAllFieldsFilled() {
     return _nameController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty &&
+        _streetController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty &&
         _confirmPasswordController.text.isNotEmpty;
   }
@@ -66,7 +72,13 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   }
 
   bool _isValidPassword(String password) {
-    return password.length >= 6;
+    // На бэке min_length=8
+    return password.length >= 8;
+  }
+
+  bool _isValidPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\\D'), '');
+    return RegExp(r'^\\d{10}$').hasMatch(digits);
   }
 
   bool _passwordsMatch() {
@@ -93,7 +105,14 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     // Валидация пароля
     if (!_isValidPassword(_passwordController.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+        const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
+      );
+      return;
+    }
+
+    if (!_isValidPhone(_phoneController.text)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Телефон должен содержать 10 цифр')),
       );
       return;
     }
@@ -112,6 +131,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
       email: _emailController.text,
       password: _passwordController.text,
       city: _selectedCity,
+      street: _streetController.text,
+      phoneNumber: _phoneController.text.replaceAll(RegExp(r'\\D'), ''),
     );
     
     // Переход на главный экран
@@ -126,10 +147,14 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   void dispose() {
     _nameController.removeListener(_onFieldChanged);
     _emailController.removeListener(_onFieldChanged);
+    _phoneController.removeListener(_onFieldChanged);
+    _streetController.removeListener(_onFieldChanged);
     _passwordController.removeListener(_onFieldChanged);
     _confirmPasswordController.removeListener(_onFieldChanged);
     _nameController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
+    _streetController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -260,7 +285,15 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
+                    child: _buildTextField(_phoneController, 'Телефон (10 цифр)'),
+                  ),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_streetController, 'Улица'),
+                  ),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,

@@ -17,6 +17,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   final TextEditingController _companyNameController = TextEditingController();
   final TextEditingController _innController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
+  final TextEditingController _cityController = TextEditingController(text: 'Омск');
+  final TextEditingController _streetController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
@@ -38,9 +41,17 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     _companyNameController.dispose();
     _innController.dispose();
     _emailController.dispose();
+    _phoneController.dispose();
+    _cityController.dispose();
+    _streetController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
+  }
+
+  bool _isValidPhone(String phone) {
+    final digits = phone.replaceAll(RegExp(r'\\D'), '');
+    return RegExp(r'^\\d{10}$').hasMatch(digits);
   }
 
   @override
@@ -165,7 +176,19 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
+                    child: _buildTextField(_phoneController, 'Телефон (10 цифр)'),
+                  ),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_cityController, 'Город'),
+                  ),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_streetController, 'Улица'),
+                  ),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
@@ -247,6 +270,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         if (_companyNameController.text.trim().isEmpty ||
             _innController.text.trim().isEmpty ||
             _emailController.text.trim().isEmpty ||
+            _phoneController.text.trim().isEmpty ||
+            _cityController.text.trim().isEmpty ||
+            _streetController.text.trim().isEmpty ||
             _passwordController.text.isEmpty ||
             _confirmPasswordController.text.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -254,9 +280,15 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           );
           return;
         }
-        if (_passwordController.text.length < 6) {
+        if (_passwordController.text.length < 8) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+            const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
+          );
+          return;
+        }
+        if (!_isValidPhone(_phoneController.text)) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Телефон должен содержать 10 цифр')),
           );
           return;
         }
@@ -271,6 +303,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           inn: _innController.text,
           email: _emailController.text,
           password: _passwordController.text,
+          city: _cityController.text,
+          street: _streetController.text,
+          phoneNumber: _phoneController.text.replaceAll(RegExp(r'\\D'), ''),
         );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

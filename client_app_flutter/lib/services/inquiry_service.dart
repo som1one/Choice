@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/inquiry_model.dart';
 import 'api_config.dart';
+import 'auth_service.dart';
 import 'remote_inquiry_service.dart';
 
 class InquiryService {
@@ -12,7 +13,9 @@ class InquiryService {
   // Сохранить запрос
   static Future<void> saveInquiry(InquiryModel inquiry) async {
     InquiryModel inquiryToStore = inquiry;
-    if (ApiConfig.isConfigured) {
+    final userType = await AuthService.getUserType();
+    final canUseRemote = ApiConfig.isConfigured && userType != UserType.company;
+    if (canUseRemote) {
       final remoteInquiry = await _remoteInquiry.createInquiry(inquiry);
       if (remoteInquiry != null) {
         inquiryToStore = remoteInquiry;
@@ -46,7 +49,9 @@ class InquiryService {
 
   // Обновить текущий запрос
   static Future<void> updateCurrentInquiry(InquiryModel inquiry) async {
-    if (ApiConfig.isConfigured) {
+    final userType = await AuthService.getUserType();
+    final canUseRemote = ApiConfig.isConfigured && userType != UserType.company;
+    if (canUseRemote) {
       await _remoteInquiry.updateInquiry(inquiry);
     }
 
@@ -67,7 +72,9 @@ class InquiryService {
 
   // Получить все запросы
   static Future<List<InquiryModel>> getAllInquiries() async {
-    if (ApiConfig.isConfigured) {
+    final userType = await AuthService.getUserType();
+    final canUseRemote = ApiConfig.isConfigured && userType != UserType.company;
+    if (canUseRemote) {
       final remoteInquiries = await _remoteInquiry.getAllInquiries();
       if (remoteInquiries != null) {
         return remoteInquiries;
