@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:file_picker/file_picker.dart';
-import 'company_settings_screen.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class CompanyAdminCabinetScreen extends StatefulWidget {
   const CompanyAdminCabinetScreen({super.key});
@@ -191,12 +190,7 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline, size: 28),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-              );
-            },
+            onPressed: () => AuthGuard.openCompanySettings(context),
           ),
         ],
       ),
@@ -465,17 +459,11 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
     return GestureDetector(
       onTap: () {
         if (text == 'Редактировать компанию') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-          );
+          AuthGuard.openCompanySettings(context);
           return;
         }
         if (text == 'Редактировать клиента') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-          );
+          AuthGuard.openClientCabinet(context);
           return;
         }
       },

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'service_query_screen.dart';
 import 'map_search_screen.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class CategoryScreen extends StatelessWidget {
   const CategoryScreen({super.key});
@@ -55,14 +55,7 @@ class CategoryScreen extends StatelessWidget {
                       padding: const EdgeInsets.only(right: 16.0),
                       child: IconButton(
                         icon: _buildPersonIcon(),
-                        onPressed: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ClientAdminCabinetScreen(),
-                            ),
-                          );
-                        },
+                        onPressed: () => AuthGuard.openClientCabinet(context),
                       ),
                     ),
                   ],

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -71,12 +71,7 @@ class HomeScreen extends StatelessWidget {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openClientCabinet(context),
                 ),
               ),
             ],

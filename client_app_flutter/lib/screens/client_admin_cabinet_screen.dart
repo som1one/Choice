@@ -5,6 +5,7 @@ import '../services/auth_service.dart';
 import '../services/user_profile_service.dart';
 import '../models/user_profile_model.dart';
 import 'client_registration_screen.dart';
+import 'login_screen.dart';
 import 'package:image_picker/image_picker.dart';
 
 class ClientAdminCabinetScreen extends StatefulWidget {
@@ -34,6 +35,29 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureAuthorized();
+    });
+  }
+
+  Future<void> _ensureAuthorized() async {
+    final loggedIn = await AuthService.isLoggedIn();
+    final userType = await AuthService.getUserType();
+    final ok = loggedIn && userType == UserType.client;
+
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сначала войдите как клиент')),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false,
+      );
+      return;
+    }
+
     _loadProfile();
   }
 

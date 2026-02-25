@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class ClientViewInquiryScreen extends StatefulWidget {
   const ClientViewInquiryScreen({super.key});
@@ -80,14 +80,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ClientAdminCabinetScreen(),
-                      ),
-                    );
-                  },
+                          onPressed: () => AuthGuard.openClientCabinet(context),
                 ),
               ),
             ],

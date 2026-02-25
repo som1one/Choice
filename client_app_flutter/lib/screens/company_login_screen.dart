@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import '../services/auth_service.dart';
 import 'company_inquiries_screen.dart';
 import 'client_registration_screen.dart';
-import 'company_settings_screen.dart';
+import '../utils/auth_guard.dart';
 
 class CompanyLoginScreen extends StatefulWidget {
   const CompanyLoginScreen({super.key});
@@ -129,12 +129,7 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openCompanySettings(context, redirectToLogin: false),
                 ),
               ),
             ],

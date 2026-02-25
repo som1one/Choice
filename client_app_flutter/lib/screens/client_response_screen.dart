@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'map_search_screen.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class ClientResponseScreen extends StatefulWidget {
   const ClientResponseScreen({super.key});
@@ -136,12 +136,7 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openClientCabinet(context),
                 ),
               ),
             ],

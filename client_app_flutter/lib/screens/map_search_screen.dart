@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class MapSearchScreen extends StatefulWidget {
   const MapSearchScreen({super.key});
@@ -61,12 +61,7 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.person_outline, size: 28),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-              );
-            },
+            onPressed: () => AuthGuard.openClientCabinet(context),
           ),
         ],
       ),

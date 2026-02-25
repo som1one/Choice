@@ -5,8 +5,8 @@ import 'company_registration_screen.dart';
 import 'company_login_screen.dart';
 import 'category_screen.dart';
 import 'login_screen.dart';
-import 'client_admin_cabinet_screen.dart';
 import '../services/auth_service.dart';
+import '../utils/auth_guard.dart';
 
 class ClientRegistrationScreen extends StatefulWidget {
   const ClientRegistrationScreen({super.key});
@@ -76,9 +76,17 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     return password.length >= 8;
   }
 
+  String _normalizePhone(String phone) {
+    var digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+      digits = digits.substring(1);
+    }
+    return digits;
+  }
+
   bool _isValidPhone(String phone) {
-    final digits = phone.replaceAll(RegExp(r'\\D'), '');
-    return RegExp(r'^\\d{10}$').hasMatch(digits);
+    final digits = _normalizePhone(phone);
+    return RegExp(r'^\d{10}$').hasMatch(digits);
   }
 
   bool _passwordsMatch() {
@@ -112,7 +120,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
 
     if (!_isValidPhone(_phoneController.text)) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Телефон должен содержать 10 цифр')),
+        const SnackBar(content: Text('Телефон: 10 цифр (можно вводить +7/8)')),
       );
       return;
     }
@@ -132,7 +140,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
       password: _passwordController.text,
       city: _selectedCity,
       street: _streetController.text,
-      phoneNumber: _phoneController.text.replaceAll(RegExp(r'\\D'), ''),
+      phoneNumber: _normalizePhone(_phoneController.text),
     );
     
     // Переход на главный экран
@@ -233,10 +241,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                 child: IconButton(
                   icon: _buildPersonIcon(),
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-                    );
+                    AuthGuard.openClientCabinet(context);
                   },
                 ),
               ),

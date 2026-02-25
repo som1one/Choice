@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'company_response_screen.dart';
-import 'company_settings_screen.dart';
+import '../utils/auth_guard.dart';
 
 class ClientInquiryScreen extends StatefulWidget {
   const ClientInquiryScreen({super.key});
@@ -81,12 +81,7 @@ class _ClientInquiryScreenState extends State<ClientInquiryScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openCompanySettings(context),
                 ),
               ),
             ],

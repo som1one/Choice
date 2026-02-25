@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
+import '../services/auth_service.dart';
+import 'company_login_screen.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   const CompanySettingsScreen({super.key});
@@ -37,6 +39,29 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _ensureAuthorized();
+    });
+  }
+
+  Future<void> _ensureAuthorized() async {
+    final loggedIn = await AuthService.isLoggedIn();
+    final userType = await AuthService.getUserType();
+    final ok = loggedIn && userType == UserType.company;
+
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сначала войдите как компания')),
+      );
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (_) => const CompanyLoginScreen()),
+        (route) => false,
+      );
+      return;
+    }
+
     _loadSettings();
   }
 

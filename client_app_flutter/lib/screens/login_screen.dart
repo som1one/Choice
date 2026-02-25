@@ -6,7 +6,7 @@ import '../services/auth_service.dart';
 import 'category_screen.dart';
 import 'client_registration_screen.dart';
 import 'company_login_screen.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -101,12 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => ClientAdminCabinetScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openClientCabinet(context, redirectToLogin: false),
                 ),
               ),
             ],

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'company_login_screen.dart';
-import 'company_settings_screen.dart';
+import '../utils/auth_guard.dart';
 
 class CompanyRegistrationScreen extends StatefulWidget {
   final String? email;
@@ -49,10 +49,15 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     super.dispose();
   }
 
-  bool _isValidPhone(String phone) {
-    final digits = phone.replaceAll(RegExp(r'\\D'), '');
-    return RegExp(r'^\\d{10}$').hasMatch(digits);
+  String _normalizePhone(String phone) {
+    var digits = phone.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
+      digits = digits.substring(1);
+    }
+    return digits;
   }
+
+  bool _isValidPhone(String phone) => RegExp(r'^\d{10}$').hasMatch(_normalizePhone(phone));
 
   @override
   Widget build(BuildContext context) {
@@ -122,10 +127,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                 child: IconButton(
                   icon: _buildPersonIcon(),
                   onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-                    );
+                    AuthGuard.openCompanySettings(context);
                   },
                 ),
               ),
@@ -288,7 +290,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         }
         if (!_isValidPhone(_phoneController.text)) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Телефон должен содержать 10 цифр')),
+            const SnackBar(content: Text('Телефон: 10 цифр (можно вводить +7/8)')),
           );
           return;
         }
@@ -305,7 +307,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           password: _passwordController.text,
           city: _cityController.text,
           street: _streetController.text,
-          phoneNumber: _phoneController.text.replaceAll(RegExp(r'\\D'), ''),
+          phoneNumber: _normalizePhone(_phoneController.text),
         );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

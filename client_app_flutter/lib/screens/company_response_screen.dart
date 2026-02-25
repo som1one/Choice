@@ -6,7 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'company_inquiries_screen.dart';
-import 'company_settings_screen.dart';
+import '../utils/auth_guard.dart';
 
 class CompanyResponseScreen extends StatefulWidget {
   const CompanyResponseScreen({super.key});
@@ -176,12 +176,7 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => CompanySettingsScreen()),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openCompanySettings(context),
                 ),
               ),
             ],

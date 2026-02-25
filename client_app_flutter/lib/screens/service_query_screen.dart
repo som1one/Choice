@@ -9,7 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'dart:io' show Platform;
 import 'map_search_screen.dart';
 import 'client_view_inquiry_screen.dart';
-import 'client_admin_cabinet_screen.dart';
+import '../utils/auth_guard.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
@@ -288,14 +288,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ClientAdminCabinetScreen(),
-                      ),
-                    );
-                  },
+                  onPressed: () => AuthGuard.openClientCabinet(context),
                 ),
               ),
             ],
