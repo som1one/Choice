@@ -35,11 +35,11 @@ echo ========================================
 echo.
 echo Теперь запустите Flutter:
 echo   cd client_app_flutter
-echo   flutter run
+echo   flutter run --dart-define=USE_REMOTE_API=true --dart-define=API_HOST=127.0.0.1
 echo.
 echo Или нажмите любую клавишу для автоматического запуска...
 pause >nul
 
 REM Запуск Flutter
 cd client_app_flutter
-flutter run
+flutter run --dart-define=USE_REMOTE_API=true --dart-define=API_HOST=127.0.0.1
