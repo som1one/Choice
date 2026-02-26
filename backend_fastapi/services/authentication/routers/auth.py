@@ -3,12 +3,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
+import os
 import sys
 from pathlib import Path
 sys.path.append(str(Path(__file__).parent.parent.parent))
 
 from common.database import get_db
-from common.security import verify_password, get_password_hash, decode_token
+from common.security import verify_password, get_password_hash, decode_token, create_access_token
 from ..models import User, UserType
 from ..schemas import (
     LoginRequest, LoginByPhoneRequest, VerifyCodeRequest,
@@ -25,6 +26,20 @@ router = APIRouter(prefix="/api/auth", tags=["auth"])
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """Вход по email и паролю"""
+    # Bootstrap admin login (без регистрации).
+    # Включается только если заданы ADMIN_EMAIL и ADMIN_PASSWORD в окружении/.env.
+    admin_email = (os.getenv("ADMIN_EMAIL") or "").strip().lower()
+    admin_password = os.getenv("ADMIN_PASSWORD") or ""
+    if admin_email and admin_password:
+        if request.email.strip().lower() == admin_email and request.password == admin_password:
+            token = create_access_token(data={
+                "id": "00000000-0000-0000-0000-000000000001",
+                "email": admin_email,
+                "user_type": "Admin",
+                "address": None,
+            })
+            return TokenResponse(access_token=token)
+
     user = db.query(User).filter(User.email == request.email).first()
     
     if not user:
