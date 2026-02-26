@@ -54,7 +54,6 @@ class RemoteAuthService {
 
   Future<RemoteAuthResult?> registerCompany({
     required String companyName,
-    required String inn,
     required String email,
     required String password,
     String street = '-',

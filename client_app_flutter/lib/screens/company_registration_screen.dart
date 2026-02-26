@@ -15,11 +15,8 @@ class CompanyRegistrationScreen extends StatefulWidget {
 
 class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   final TextEditingController _companyNameController = TextEditingController();
-  final TextEditingController _innController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _cityController = TextEditingController(text: 'Омск');
-  final TextEditingController _streetController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
@@ -42,11 +39,8 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   @override
   void dispose() {
     _companyNameController.dispose();
-    _innController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
-    _cityController.dispose();
-    _streetController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -185,23 +179,11 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_innController, 'ИНН'),
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_emailController, 'mail'),
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_phoneController, 'Телефон (10 цифр)'),
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_cityController, 'Город'),
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_streetController, 'Улица'),
                   ),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
@@ -285,11 +267,8 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     return GestureDetector(
       onTap: () async {
         if (_companyNameController.text.trim().isEmpty ||
-            _innController.text.trim().isEmpty ||
             _emailController.text.trim().isEmpty ||
             _phoneController.text.trim().isEmpty ||
-            _cityController.text.trim().isEmpty ||
-            _streetController.text.trim().isEmpty ||
             _passwordController.text.isEmpty ||
             _confirmPasswordController.text.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -317,11 +296,8 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         }
         await AuthService.registerCompany(
           companyName: _companyNameController.text,
-          inn: _innController.text,
           email: _emailController.text,
           password: _passwordController.text,
-          city: _cityController.text,
-          street: _streetController.text,
           phoneNumber: _normalizePhone(_phoneController.text),
           companyType: _companyType,
         );

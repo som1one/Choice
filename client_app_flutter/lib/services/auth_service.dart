@@ -202,23 +202,26 @@ class AuthService {
 
   static Future<void> registerCompany({
     required String companyName,
-    required String inn,
     required String email,
     required String password,
-    required String city,
-    required String street,
     required String phoneNumber,
     String? companyType,
+    String? inn,
+    String? city,
+    String? street,
   }) async {
+    final normalizedInn = (inn ?? '').trim();
+    final normalizedCity = (city ?? '-').trim().isEmpty ? '-' : (city ?? '-').trim();
+    final normalizedStreet = (street ?? '-').trim().isEmpty ? '-' : (street ?? '-').trim();
+
     String? remoteToken;
     if (ApiConfig.isConfigured) {
       final remoteResult = await _remoteAuth.registerCompany(
         companyName: companyName,
-        inn: inn,
         email: email,
         password: password,
-        city: city,
-        street: street,
+        city: normalizedCity,
+        street: normalizedStreet,
         phoneNumber: phoneNumber,
       );
       if (remoteResult != null && !remoteResult.success) {
@@ -230,11 +233,11 @@ class AuthService {
     final prefs = await SharedPreferences.getInstance();
     final payload = jsonEncode({
       'companyName': companyName.trim(),
-      'inn': inn.trim(),
+      'inn': normalizedInn,
       'email': email.trim().toLowerCase(),
       'password': _hashPassword(password),
-      'city': city.trim(),
-      'street': street.trim(),
+      'city': normalizedCity,
+      'street': normalizedStreet,
       'phoneNumber': phoneNumber.trim(),
       if (companyType != null && companyType.trim().isNotEmpty) 'companyType': companyType.trim(),
     });
