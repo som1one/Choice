@@ -46,6 +46,37 @@ async def get_all_companies(
         for c in companies if c.is_data_filled
     ]
 
+
+@router.get("/getAllAdmin", response_model=list[CompanyDetailsResponse])
+async def get_all_companies_admin(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Получение всех компаний (админ, без фильтра is_data_filled)"""
+    repository = CompanyRepository(db)
+    companies = await repository.get_all()
+    return [
+        CompanyDetailsResponse(
+            id=c.id,
+            guid=c.guid,
+            title=c.title,
+            phone_number=c.phone_number,
+            email=c.email,
+            icon_uri=c.icon_uri,
+            site_url=c.site_url,
+            address={"city": c.city, "street": c.street},
+            coords=c.coordinates,
+            average_grade=c.average_grade,
+            social_medias=c.social_medias or [],
+            photo_uris=c.photo_uris or [],
+            categories_id=c.categories_id or [],
+            prepayment_available=c.prepayment_available,
+            reviews_count=c.reviews_count,
+            description=c.description
+        )
+        for c in companies
+    ]
+
 @router.get("/getByCategory", response_model=list[CompanyDetailsResponse])
 async def get_companies_by_category(
     category_id: int,

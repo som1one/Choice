@@ -4,6 +4,7 @@ import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'api_config.dart';
 import 'remote_auth_service.dart';
+import 'auth_token_store.dart';
 
 enum UserType { client, company, admin }
 
@@ -38,6 +39,20 @@ class AuthService {
     }
     // Легаси-формат: ранее пароль мог храниться в открытом виде.
     return savedPassword == candidatePassword;
+  }
+
+  static Map<String, dynamic>? _decodeJwtPayload(String token) {
+    try {
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final normalized = base64Url.normalize(parts[1]);
+      final bytes = base64Url.decode(normalized);
+      final jsonStr = utf8.decode(bytes);
+      final decoded = jsonDecode(jsonStr);
+      return decoded is Map<String, dynamic> ? decoded : null;
+    } catch (_) {
+      return null;
+    }
   }
 
   // Сохранить статус регистрации
@@ -253,10 +268,31 @@ class AuthService {
     required String password,
   }) async {
     final candidate = email.trim().toLowerCase();
+
+    // Сначала пробуем реальный бек-логин (нужен токен с user_type=Admin)
+    if (ApiConfig.isConfigured) {
+      final remote = await _remoteAuth.loginClient( // тот же /api/auth/login
+        email: candidate,
+        password: password,
+      );
+      if (remote != null && remote.success && (remote.token ?? '').isNotEmpty) {
+        final token = remote.token!;
+        final payload = _decodeJwtPayload(token);
+        final userType = payload?['user_type']?.toString();
+        if (userType == 'Admin') {
+          await AuthTokenStore.setToken(token);
+          await setLoggedIn(true, userType: UserType.admin);
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString(_adminCredentialsKey, jsonEncode({'email': candidate}));
+          return true;
+        }
+      }
+    }
+
+    // Локальный фолбэк (для dev/offline)
     final ok = candidate == _adminEmail.trim().toLowerCase() && password == _adminPassword;
     if (!ok) return false;
     await setLoggedIn(true, userType: UserType.admin);
-
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_adminCredentialsKey, jsonEncode({'email': candidate}));
     return true;

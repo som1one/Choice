@@ -83,3 +83,36 @@ async def get_reviews(
     repo = ReviewRepository(db)
     reviews = await repo.get_by_receiver(guid)
     return reviews
+
+
+@router.get("/getAll", response_model=list[ReviewResponse])
+async def get_all_reviews_admin(
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Получение всех отзывов (админ)"""
+    repo = ReviewRepository(db)
+    return await repo.get_all()
+
+
+@router.delete("/delete")
+async def delete_review_admin(
+    id: int,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Удаление отзыва (админ)"""
+    repo = ReviewRepository(db)
+    review = await repo.get(id)
+    if not review:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Review not found"
+        )
+    ok = await repo.delete(review)
+    if not ok:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to delete review"
+        )
+    return {"message": "Review deleted successfully"}

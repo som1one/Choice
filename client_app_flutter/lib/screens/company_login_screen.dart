@@ -93,9 +93,17 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
           child: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            leading: const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.favorite, color: Colors.lightBlue, size: 32),
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: GestureDetector(
+                onLongPress: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                  );
+                },
+                child: const Icon(Icons.favorite, color: Colors.lightBlue, size: 32),
+              ),
             ),
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -262,18 +270,6 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                       child: const Text(
                         'Регистрация',
                         style: TextStyle(color: Colors.blue, fontSize: 14),
-                      ),
-                    ),
-                    TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-                        );
-                      },
-                      child: const Text(
-                        'Вход администратора',
-                        style: TextStyle(color: Colors.black54, fontSize: 13),
                       ),
                     ),
                   ],

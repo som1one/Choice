@@ -20,6 +20,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final Map<String, String> _testClientAdmin = AuthService.getClientAdminTestCredentials();
+  int _adminTapCount = 0;
   
   String _selectedCity = 'Омск';
   final List<String> _cities = [
@@ -66,10 +67,28 @@ class _LoginScreenState extends State<LoginScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
+              child: GestureDetector(
+                onLongPress: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                  );
+                },
+                onTap: () {
+                  _adminTapCount++;
+                  if (_adminTapCount >= 7) {
+                    _adminTapCount = 0;
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                    );
+                  }
+                },
+                child: Icon(
+                  Icons.favorite,
+                  color: Colors.lightBlue[300],
+                  size: 28,
+                ),
               ),
             ),
             title: GestureDetector(
@@ -281,19 +300,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: TextButton(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
-                        );
-                      },
-                      child: const Text('Вход администратора'),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: GestureDetector(

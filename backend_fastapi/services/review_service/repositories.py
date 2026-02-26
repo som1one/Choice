@@ -20,12 +20,26 @@ class ReviewRepository:
     async def get_by_receiver(self, receiver_id: str) -> list[Review]:
         """Получение отзывов получателя"""
         return self.db.query(Review).filter(Review.receiver_id == receiver_id).all()
+
+    async def get_all(self) -> list[Review]:
+        """Получение всех отзывов (админ)"""
+        return self.db.query(Review).order_by(Review.id.desc()).all()
     
     async def update(self, review: Review) -> bool:
         """Обновление отзыва"""
         try:
             self.db.commit()
             self.db.refresh(review)
+            return True
+        except Exception:
+            self.db.rollback()
+            return False
+
+    async def delete(self, review: Review) -> bool:
+        """Удаление отзыва"""
+        try:
+            self.db.delete(review)
+            self.db.commit()
             return True
         except Exception:
             self.db.rollback()

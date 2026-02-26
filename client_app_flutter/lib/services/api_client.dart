@@ -84,4 +84,25 @@ class ApiClient {
       return null;
     }
   }
+
+  static Future<Map<String, dynamic>?> deleteJson(
+    String path, {
+    required String baseUrl,
+  }) async {
+    if (!ApiConfig.isConfigured) return null;
+    try {
+      final response = await http
+          .delete(
+            _uri(baseUrl, path),
+            headers: await _headers(),
+          )
+          .timeout(_timeout);
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      if (response.body.isEmpty) return <String, dynamic>{};
+      final decoded = jsonDecode(response.body);
+      return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    } catch (_) {
+      return null;
+    }
+  }
 }
