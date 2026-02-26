@@ -43,7 +43,7 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   Future<void> _ensureAuthorized() async {
     final loggedIn = await AuthService.isLoggedIn();
     final userType = await AuthService.getUserType();
-    final ok = loggedIn && userType == UserType.client;
+    final ok = loggedIn && (userType == UserType.client || userType == UserType.admin);
 
     if (!mounted) return;
     if (!ok) {
@@ -194,6 +194,7 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
         ],
       ),
       body: SingleChildScrollView(
+        padding: const EdgeInsets.only(bottom: 110),
         child: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Column(
@@ -336,11 +337,14 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
 
               _buildButton('Сохранить профиль', onTap: _saveProfile),
 
-              const SizedBox(height: 32),
-
-              _buildLogoutButton(context),
             ],
           ),
+        ),
+      ),
+      bottomNavigationBar: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+          child: _buildLogoutButton(context),
         ),
       ),
 

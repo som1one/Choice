@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../services/auth_service.dart';
-import '../services/auth_service.dart' as auth show UserType;
 import '../screens/login_screen.dart';
 import '../screens/company_login_screen.dart';
 import '../screens/client_admin_cabinet_screen.dart';
@@ -11,7 +10,7 @@ class AuthGuard {
   static Future<void> openClientCabinet(BuildContext context, {bool redirectToLogin = true}) async {
     final loggedIn = await AuthService.isLoggedIn();
     final userType = await AuthService.getUserType();
-    final ok = loggedIn && userType == auth.UserType.client;
+    final ok = loggedIn && (userType == UserType.client || userType == UserType.admin);
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -28,7 +27,7 @@ class AuthGuard {
   static Future<void> openCompanySettings(BuildContext context, {bool redirectToLogin = true}) async {
     final loggedIn = await AuthService.isLoggedIn();
     final userType = await AuthService.getUserType();
-    final ok = loggedIn && userType == auth.UserType.company;
+    final ok = loggedIn && (userType == UserType.company || userType == UserType.admin);
     if (!context.mounted) return;
     if (!ok) {
       ScaffoldMessenger.of(context).showSnackBar(

@@ -23,6 +23,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
+  // Влияет на отображение/сохранение данных, но не ломает бек (пока отправляем только существующие поля)
+  String _companyType = 'юрлицо';
+
   @override
   void initState() {
     super.initState();
@@ -163,7 +166,19 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.70,
+                    child: SegmentedButton<String>(
+                      segments: const [
+                        ButtonSegment(value: 'юрлицо', label: Text('Юрлицо')),
+                        ButtonSegment(value: 'физлицо', label: Text('Физлицо')),
+                      ],
+                      selected: {_companyType},
+                      onSelectionChanged: (v) => setState(() => _companyType = v.first),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_companyNameController, 'Название компании'),
@@ -308,6 +323,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           city: _cityController.text,
           street: _streetController.text,
           phoneNumber: _normalizePhone(_phoneController.text),
+          companyType: _companyType,
         );
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(

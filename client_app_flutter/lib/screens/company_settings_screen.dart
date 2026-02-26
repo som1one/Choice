@@ -47,7 +47,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   Future<void> _ensureAuthorized() async {
     final loggedIn = await AuthService.isLoggedIn();
     final userType = await AuthService.getUserType();
-    final ok = loggedIn && userType == UserType.company;
+    final ok = loggedIn && (userType == UserType.company || userType == UserType.admin);
 
     if (!mounted) return;
     if (!ok) {

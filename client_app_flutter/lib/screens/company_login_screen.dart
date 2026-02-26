@@ -6,6 +6,7 @@ import '../services/auth_service.dart';
 import 'company_inquiries_screen.dart';
 import 'client_registration_screen.dart';
 import '../utils/auth_guard.dart';
+import 'admin_login_screen.dart';
 
 class CompanyLoginScreen extends StatefulWidget {
   const CompanyLoginScreen({super.key});
@@ -261,6 +262,18 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                       child: const Text(
                         'Регистрация',
                         style: TextStyle(color: Colors.blue, fontSize: 14),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                        );
+                      },
+                      child: const Text(
+                        'Вход администратора',
+                        style: TextStyle(color: Colors.black54, fontSize: 13),
                       ),
                     ),
                   ],

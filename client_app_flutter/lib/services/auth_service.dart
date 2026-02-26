@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart' show kReleaseMode;
 import 'api_config.dart';
 import 'remote_auth_service.dart';
 
-enum UserType { client, company }
+enum UserType { client, company, admin }
 
 class AuthService {
   static const String _isRegisteredKey = 'is_registered';
@@ -14,10 +14,17 @@ class AuthService {
   static const String _clientCredentialsKey = 'client_credentials';
   static const String _companyCredentialsKey = 'company_credentials';
   static const String _authTokenKey = 'auth_token';
+  static const String _adminCredentialsKey = 'admin_credentials';
   static const String _testClientAdminEmail = 'admin@client.test';
   static const String _testClientAdminPassword = '123456';
   static const String _testCompanyAdminEmail = 'admin@company.test';
   static const String _testCompanyAdminPassword = '123456';
+
+  // Админ (задается при сборке через dart-define)
+  static const String _adminEmail =
+      String.fromEnvironment('ADMIN_EMAIL', defaultValue: 'admin@choice.local');
+  static const String _adminPassword =
+      String.fromEnvironment('ADMIN_PASSWORD', defaultValue: 'admin123456');
   static final RemoteAuthService _remoteAuth = RemoteAuthService();
 
   static String _hashPassword(String password) {
@@ -78,6 +85,11 @@ class AuthService {
   static Future<bool> isCompany() async {
     final userType = await getUserType();
     return userType == UserType.company;
+  }
+
+  static Future<bool> isAdmin() async {
+    final userType = await getUserType();
+    return userType == UserType.admin;
   }
 
   // Проверить, авторизован ли пользователь (зарегистрирован или вошел)
@@ -196,6 +208,7 @@ class AuthService {
     required String city,
     required String street,
     required String phoneNumber,
+    String? companyType,
   }) async {
     String? remoteToken;
     if (ApiConfig.isConfigured) {
@@ -223,12 +236,34 @@ class AuthService {
       'city': city.trim(),
       'street': street.trim(),
       'phoneNumber': phoneNumber.trim(),
+      if (companyType != null && companyType.trim().isNotEmpty) 'companyType': companyType.trim(),
     });
     await prefs.setString(_companyCredentialsKey, payload);
     if (remoteToken != null && remoteToken.isNotEmpty) {
       await prefs.setString(_authTokenKey, remoteToken);
     }
     await setRegistered(true, userType: UserType.company);
+  }
+
+  static Future<bool> loginAdmin({
+    required String email,
+    required String password,
+  }) async {
+    final candidate = email.trim().toLowerCase();
+    final ok = candidate == _adminEmail.trim().toLowerCase() && password == _adminPassword;
+    if (!ok) return false;
+    await setLoggedIn(true, userType: UserType.admin);
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_adminCredentialsKey, jsonEncode({'email': candidate}));
+    return true;
+  }
+
+  static Map<String, String> getAdminCredentialsHint() {
+    return {
+      'email': _adminEmail,
+      'password': _adminPassword,
+    };
   }
 
   static Future<bool> loginCompany({
@@ -289,5 +324,6 @@ class AuthService {
     await prefs.remove(_isLoggedInKey);
     await prefs.remove(_userTypeKey);
     await prefs.remove(_authTokenKey);
+    await prefs.remove(_adminCredentialsKey);
   }
 }

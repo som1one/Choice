@@ -7,6 +7,7 @@ import 'category_screen.dart';
 import 'client_registration_screen.dart';
 import 'company_login_screen.dart';
 import '../utils/auth_guard.dart';
+import 'admin_login_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -280,6 +281,19 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: TextButton(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                        );
+                      },
+                      child: const Text('Вход администратора'),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: GestureDetector(
