@@ -55,12 +55,23 @@ async def create_order(
 
 @router.get("/get", response_model=list[OrderResponse])
 async def get_orders(
+    order_request_id: int | None = None,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Получение заказов пользователя"""
-    user_id = current_user["id"]
+    """Получение заказов пользователя или по заявке"""
     repo = OrderRepository(db)
+    
+    # Если указан order_request_id, возвращаем заказы по заявке
+    if order_request_id is not None:
+        orders = await repo.get_by_order_request(order_request_id)
+        # Фильтруем только заказы текущего пользователя (клиента)
+        user_id = current_user["id"]
+        orders = [o for o in orders if o.client_id == user_id]
+        return orders
+    
+    # Иначе возвращаем все заказы пользователя
+    user_id = current_user["id"]
     orders = await repo.get_by_user(user_id)
     return orders
 
@@ -214,12 +225,39 @@ async def cancel_enrollment(
 
 @router.put("/addReview")
 async def add_review(
+    client_id: str,
+    company_id: str,
+    db: Session = Depends(get_db)
+):
+    """Проверка и добавление возможности оставить отзыв (используется Review Service)"""
+    repo = OrderRepository(db)
+    
+    # Ищем завершенный заказ между клиентом и компанией
+    orders = await repo.get_by_users(client_id, company_id)
+    
+    for order in orders:
+        # Проверяем, что заказ завершен и отзыв еще не оставлен
+        if order.status == OrderStatus.FINISHED.value:
+            if not order.reviews or client_id not in order.reviews:
+                # Добавляем ID клиента в список отзывов (как маркер, что отзыв можно оставить)
+                if not order.reviews:
+                    order.reviews = []
+                if client_id not in order.reviews:
+                    order.reviews.append(client_id)
+                    result = await repo.update(order)
+                    if result:
+                        return {"success": True, "message": "Review can be added"}
+    
+    return {"success": False, "message": "No finished order found or review already added"}
+
+@router.put("/addReviewToOrder")
+async def add_review_to_order(
     order_id: int,
     review_guid: str,
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Добавление отзыва к заказу"""
+    """Добавление отзыва к заказу (внутренний метод)"""
     repo = OrderRepository(db)
     order = await repo.get(order_id)
     

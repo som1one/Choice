@@ -1,12 +1,12 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import '../services/auth_service.dart';
 import 'company_inquiries_screen.dart';
 import 'client_registration_screen.dart';
 import '../utils/auth_guard.dart';
 import 'admin_login_screen.dart';
+import '../navigation/company_tab_navigator.dart';
 
 class CompanyLoginScreen extends StatefulWidget {
   const CompanyLoginScreen({super.key});
@@ -18,7 +18,6 @@ class CompanyLoginScreen extends StatefulWidget {
 class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final Map<String, String> _testCompanyAdmin = AuthService.getCompanyAdminTestCredentials();
   String _selectedCity = 'Омск';
   final List<String> _cities = [
     'Москва',
@@ -64,12 +63,25 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
       return;
     }
     
-    // Переходим на экран заявок компании
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => CompanyInquiriesScreen()),
-      (route) => false,
-    );
+    // Проверяем тип пользователя и переходим на соответствующий экран
+    final isCompany = await AuthService.isCompany();
+    final isAdmin = await AuthService.isAdmin();
+    if (!mounted) return;
+    
+    if (isAdmin) {
+      // TODO: Переход на AdminPanelScreen
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+        (route) => false,
+      );
+    } else {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+        (route) => false,
+      );
+    }
   }
 
   Widget _buildPersonIcon() {
@@ -223,40 +235,6 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                         ),
                       ),
                     ),
-                    if (!kReleaseMode) ...[
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.52,
-                        child: Text(
-                          'Тестовая компания: ${_testCompanyAdmin['email']} / ${_testCompanyAdmin['password']}',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(fontSize: 11, color: Colors.black54),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: MediaQuery.of(context).size.width * 0.52,
-                        height: 44,
-                        child: ElevatedButton(
-                          onPressed: () async {
-                            _emailController.text = _testCompanyAdmin['email'] ?? '';
-                            _passwordController.text = _testCompanyAdmin['password'] ?? '';
-                            await _login();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.orange[300],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                          ),
-                          child: const Text(
-                            'Войти как тестовая компания',
-                            style: TextStyle(color: Colors.black87, fontSize: 13),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ],
                     const SizedBox(height: 16),
                     TextButton(
                       onPressed: () {

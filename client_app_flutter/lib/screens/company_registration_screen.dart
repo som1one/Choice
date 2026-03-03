@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'company_login_screen.dart';
 import '../utils/auth_guard.dart';
+import '../navigation/company_tab_navigator.dart';
 
 class CompanyRegistrationScreen extends StatefulWidget {
   final String? email;
@@ -16,12 +17,16 @@ class CompanyRegistrationScreen extends StatefulWidget {
 class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   final TextEditingController _companyNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
 
   // Влияет на отображение/сохранение данных, но не ломает бек (пока отправляем только существующие поля)
   String _companyType = 'юрлицо';
+  
+  bool _emailError = false;
+  bool _emailValidationError = false;
+  bool _weakPasswordError = false;
+  bool _passwordsNotMatchedError = false;
 
   @override
   void initState() {
@@ -34,27 +39,68 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
       _passwordController.text = widget.password!;
       _confirmPasswordController.text = widget.password!;
     }
+    
+    _companyNameController.addListener(_onFieldChanged);
+    _emailController.addListener(_onFieldChanged);
+    _passwordController.addListener(_onFieldChanged);
+    _confirmPasswordController.addListener(_onFieldChanged);
+  }
+
+  void _onFieldChanged() {
+    _validateFields();
+    setState(() {});
+  }
+
+  void _validateFields() {
+    // Валидация email
+    if (_emailController.text.isNotEmpty) {
+      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      _emailValidationError = !emailRegex.hasMatch(_emailController.text);
+    } else {
+      _emailValidationError = false;
+    }
+
+    // Валидация пароля (минимум 6 знаков)
+    if (_passwordController.text.isNotEmpty) {
+      _weakPasswordError = _passwordController.text.length < 6;
+    } else {
+      _weakPasswordError = false;
+    }
+
+    // Проверка совпадения паролей
+    if (_confirmPasswordController.text.isNotEmpty) {
+      _passwordsNotMatchedError = _passwordController.text != _confirmPasswordController.text;
+    } else {
+      _passwordsNotMatchedError = false;
+    }
+  }
+
+  bool _areAllFieldsFilled() {
+    return _companyNameController.text.isNotEmpty &&
+        _emailController.text.isNotEmpty &&
+        _passwordController.text.isNotEmpty &&
+        _confirmPasswordController.text.isNotEmpty;
+  }
+
+  bool _isFormValid() {
+    return _areAllFieldsFilled() &&
+        !_emailValidationError &&
+        !_weakPasswordError &&
+        !_passwordsNotMatchedError;
   }
 
   @override
   void dispose() {
+    _companyNameController.removeListener(_onFieldChanged);
+    _emailController.removeListener(_onFieldChanged);
+    _passwordController.removeListener(_onFieldChanged);
+    _confirmPasswordController.removeListener(_onFieldChanged);
     _companyNameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
   }
-
-  String _normalizePhone(String phone) {
-    var digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
-      digits = digits.substring(1);
-    }
-    return digits;
-  }
-
-  bool _isValidPhone(String phone) => RegExp(r'^\d{10}$').hasMatch(_normalizePhone(phone));
 
   @override
   Widget build(BuildContext context) {
@@ -177,26 +223,67 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_companyNameController, 'Название компании'),
                   ),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_emailController, 'mail'),
                   ),
+                  if (_emailValidationError || _emailError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: Text(
+                        _emailError ? 'E-mail уже используется' : 'Введите корректный E-mail',
+                        style: const TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_phoneController, 'Телефон (10 цифр)'),
+                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
                   ),
+                  if (_weakPasswordError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: const Text(
+                        'Пароль должен содержать минимум 6 символов',
+                        style: TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
+                    child: _buildTextField(_confirmPasswordController, 'Повторить пароль', isPassword: true),
                   ),
+                  if (_passwordsNotMatchedError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: const Text(
+                        'Пароли не совпадают',
+                        style: TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_confirmPasswordController, 'Повторите пароль', isPassword: true),
-                  ),
-                  SizedBox(height: 32),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildActionButton('Регистрация компании'),
+                    child: _buildActionButton('Регистрация компании', isEnabled: _isFormValid()),
                   ),
                 ],
               ),
@@ -263,57 +350,139 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     );
   }
 
-  Widget _buildActionButton(String text) {
-    return GestureDetector(
-      onTap: () async {
-        if (_companyNameController.text.trim().isEmpty ||
-            _emailController.text.trim().isEmpty ||
-            _phoneController.text.trim().isEmpty ||
-            _passwordController.text.isEmpty ||
-            _confirmPasswordController.text.isEmpty) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Заполните все поля')),
-          );
-          return;
-        }
-        if (_passwordController.text.length < 8) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
-          );
-          return;
-        }
-        if (!_isValidPhone(_phoneController.text)) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Телефон: 10 цифр (можно вводить +7/8)')),
-          );
-          return;
-        }
-        if (_passwordController.text != _confirmPasswordController.text) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Пароли не совпадают')),
-          );
-          return;
-        }
-        await AuthService.registerCompany(
-          companyName: _companyNameController.text,
-          email: _emailController.text,
-          password: _passwordController.text,
-          phoneNumber: _normalizePhone(_phoneController.text),
-          companyType: _companyType,
-        );
-        if (!mounted) return;
+  Future<void> _validateAndRegister() async {
+    if (!_isFormValid()) {
+      if (!_areAllFieldsFilled()) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Компания зарегистрирована')),
+          const SnackBar(content: Text('Заполните все поля')),
         );
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (_) => CompanyLoginScreen()),
+      } else if (_emailValidationError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Введите корректный email')),
         );
-      },
+      } else if (_weakPasswordError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+        );
+      } else if (_passwordsNotMatchedError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароли не совпадают')),
+        );
+      }
+      return;
+    }
+
+    setState(() {
+      _emailError = false;
+    });
+
+    if (!mounted) return;
+
+    try {
+      await AuthService.registerCompany(
+        companyName: _companyNameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+        phoneNumber: '0000000000',
+        companyType: _companyType,
+      );
+      // Автоматически переходим на главный экран компании после регистрации
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+        (route) => false,
+      );
+    } catch (e) {
+      setState(() {
+        _emailError = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ошибка регистрации. Email уже используется')),
+      );
+    }
+  }
+
+  void _showSuccessModal() {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(
+              Icons.thumb_up,
+              color: Color(0xFF2D81E0),
+              size: 40,
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Аккаунт компании создан',
+              style: TextStyle(
+                color: Colors.black,
+                fontWeight: FontWeight.w500,
+                fontSize: 20,
+              ),
+            ),
+            const SizedBox(height: 10),
+            const Text(
+              'Заполните информацию о вашей компании',
+              style: TextStyle(
+                color: Color(0xFF6D7885),
+                fontSize: 14,
+                fontWeight: FontWeight.w400,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                Navigator.pop(context); // Закрываем модальное окно
+                // Автоматический вход и переход на FillCompanyDataScreen
+                final loginSuccess = await AuthService.loginCompany(
+                  email: _emailController.text,
+                  password: _passwordController.text,
+                );
+                if (!mounted) return;
+                if (loginSuccess) {
+                  // TODO: Переход на FillCompanyDataScreen
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
+                    (route) => false,
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF2D81E0),
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              child: const Text(
+                'Ок',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(String text, {bool isEnabled = true}) {
+    return GestureDetector(
+      onTap: isEnabled ? _validateAndRegister : null,
       child: Container(
         height: 50,
         decoration: BoxDecoration(
-          color: const Color(0xFF87CEEB), // Яркий небесно-голубой цвет
+          color: isEnabled ? const Color(0xFF87CEEB) : const Color(0xFFABCDf3),
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
@@ -326,8 +495,8 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         alignment: Alignment.center,
         child: Text(
           text,
-          style: const TextStyle(
-            color: Colors.white,
+          style: TextStyle(
+            color: isEnabled ? Colors.white : Colors.white70,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),

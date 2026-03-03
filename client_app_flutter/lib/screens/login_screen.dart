@@ -1,13 +1,15 @@
 // ignore_for_file: use_build_context_synchronously, sized_box_for_whitespace
 
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kReleaseMode;
 import '../services/auth_service.dart';
 import 'category_screen.dart';
 import 'client_registration_screen.dart';
 import 'company_login_screen.dart';
 import '../utils/auth_guard.dart';
 import 'admin_login_screen.dart';
+import 'reset_password_screen.dart';
+import '../navigation/client_tab_navigator.dart';
+import '../navigation/company_tab_navigator.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -19,7 +21,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final Map<String, String> _testClientAdmin = AuthService.getClientAdminTestCredentials();
   int _adminTapCount = 0;
   
   String _selectedCity = 'Омск';
@@ -191,11 +192,31 @@ class _LoginScreenState extends State<LoginScreen> {
                           );
                           return;
                         }
-                        Navigator.pushAndRemoveUntil(
-                          context,
-                          MaterialPageRoute(builder: (context) => CategoryScreen()),
-                          (route) => false,
-                        );
+                        // Определяем тип пользователя и переходим на соответствующий экран
+                        final isCompany = await AuthService.isCompany();
+                        final isAdmin = await AuthService.isAdmin();
+                        if (!mounted) return;
+                        
+                        if (isAdmin) {
+                          // TODO: Переход на AdminPanelScreen
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ClientTabNavigator()),
+                            (route) => false,
+                          );
+                        } else if (isCompany) {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+                            (route) => false,
+                          );
+                        } else {
+                          Navigator.pushAndRemoveUntil(
+                            context,
+                            MaterialPageRoute(builder: (context) => const ClientTabNavigator()),
+                            (route) => false,
+                          );
+                        }
                       },
                       child: Container(
                         width: double.infinity,
@@ -220,52 +241,23 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-                  if (!kReleaseMode) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.52,
-                      child: Text(
-                        'Тестовый админ: ${_testClientAdmin['email']} / ${_testClientAdmin['password']}',
-                        textAlign: TextAlign.center,
-                        style: const TextStyle(fontSize: 11, color: Colors.black54),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
+                      );
+                    },
+                    child: const Text(
+                      'Забыли пароль?',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF2688EB),
+                        decoration: TextDecoration.underline,
                       ),
                     ),
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.52,
-                      child: GestureDetector(
-                        onTap: () async {
-                          _loginController.text = _testClientAdmin['email'] ?? '';
-                          _passwordController.text = _testClientAdmin['password'] ?? '';
-                          final ok = await AuthService.loginClient(
-                            loginOrEmail: _loginController.text,
-                            password: _passwordController.text,
-                          );
-                          if (!mounted) return;
-                          if (!ok) return;
-                          Navigator.pushAndRemoveUntil(
-                            context,
-                            MaterialPageRoute(builder: (_) => CategoryScreen()),
-                            (route) => false,
-                          );
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.orange[300],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Text(
-                            'Войти как тестовый админ клиента',
-                            style: TextStyle(fontSize: 13, color: Colors.black87),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
@@ -313,7 +305,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         width: double.infinity,
                         height: 50,
                         decoration: BoxDecoration(
-                          color: Colors.green[300],
+                          color: const Color(0xFF87CEEB),
                           borderRadius: BorderRadius.circular(10),
                           boxShadow: [
                             BoxShadow(
@@ -326,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         alignment: Alignment.center,
                         child: const Text(
                           'Вход для компании',
-                          style: TextStyle(fontSize: 14, color: Colors.black87),
+                          style: TextStyle(fontSize: 14, color: Colors.white),
                           textAlign: TextAlign.center,
                         ),
                       ),

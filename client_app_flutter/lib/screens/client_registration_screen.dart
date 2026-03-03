@@ -2,9 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'company_registration_screen.dart';
-import 'company_login_screen.dart';
 import 'category_screen.dart';
-import 'login_screen.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_guard.dart';
 
@@ -18,10 +16,13 @@ class ClientRegistrationScreen extends StatefulWidget {
 class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController = TextEditingController();
-  final TextEditingController _streetController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  
+  bool _emailError = false;
+  bool _emailValidationError = false;
+  bool _weakPasswordError = false;
+  bool _passwordsNotMatchedError = false;
   
   String _selectedCity = 'Омск';
   final List<String> _cities = [
@@ -45,124 +46,119 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   @override
   void initState() {
     super.initState();
-    // Добавляем слушатели для отслеживания изменений
     _nameController.addListener(_onFieldChanged);
     _emailController.addListener(_onFieldChanged);
-    _phoneController.addListener(_onFieldChanged);
-    _streetController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
     _confirmPasswordController.addListener(_onFieldChanged);
   }
 
   void _onFieldChanged() {
-    setState(() {}); // Перерисовываем виджет при изменении полей
+    _validateFields();
+    setState(() {});
+  }
+
+  void _validateFields() {
+    // Валидация email
+    if (_emailController.text.isNotEmpty) {
+      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
+      _emailValidationError = !emailRegex.hasMatch(_emailController.text);
+    } else {
+      _emailValidationError = false;
+    }
+
+    // Валидация пароля (минимум 6 знаков)
+    if (_passwordController.text.isNotEmpty) {
+      _weakPasswordError = _passwordController.text.length < 6;
+    } else {
+      _weakPasswordError = false;
+    }
+
+    // Проверка совпадения паролей
+    if (_confirmPasswordController.text.isNotEmpty) {
+      _passwordsNotMatchedError = _passwordController.text != _confirmPasswordController.text;
+    } else {
+      _passwordsNotMatchedError = false;
+    }
   }
 
   bool _areAllFieldsFilled() {
     return _nameController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
-        _phoneController.text.isNotEmpty &&
-        _streetController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty &&
         _confirmPasswordController.text.isNotEmpty;
   }
 
-  bool _isValidEmail(String email) {
-    return RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$').hasMatch(email);
+  bool _isFormValid() {
+    return _areAllFieldsFilled() &&
+        !_emailValidationError &&
+        !_weakPasswordError &&
+        !_passwordsNotMatchedError;
   }
 
-  bool _isValidPassword(String password) {
-    // На бэке min_length=8
-    return password.length >= 8;
-  }
-
-  String _normalizePhone(String phone) {
-    var digits = phone.replaceAll(RegExp(r'\D'), '');
-    if (digits.length == 11 && (digits.startsWith('7') || digits.startsWith('8'))) {
-      digits = digits.substring(1);
-    }
-    return digits;
-  }
-
-  bool _isValidPhone(String phone) {
-    final digits = _normalizePhone(phone);
-    return RegExp(r'^\d{10}$').hasMatch(digits);
-  }
-
-  bool _passwordsMatch() {
-    return _passwordController.text == _confirmPasswordController.text;
-  }
 
   Future<void> _validateAndRegister() async {
-    // Проверка заполненности
-    if (!_areAllFieldsFilled()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполните все поля')),
-      );
+    if (!_isFormValid()) {
+      if (!_areAllFieldsFilled()) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Заполните все поля')),
+        );
+      } else if (_emailValidationError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Введите корректный email')),
+        );
+      } else if (_weakPasswordError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+        );
+      } else if (_passwordsNotMatchedError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Пароли не совпадают')),
+        );
+      }
       return;
     }
 
-    // Валидация email
-    if (!_isValidEmail(_emailController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Введите корректный email')),
-      );
-      return;
-    }
+    setState(() {
+      _emailError = false;
+    });
 
-    // Валидация пароля
-    if (!_isValidPassword(_passwordController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
-      );
-      return;
-    }
+    if (!mounted) return;
 
-    if (!_isValidPhone(_phoneController.text)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Телефон: 10 цифр (можно вводить +7/8)')),
+    try {
+      await AuthService.registerClient(
+        fullName: _nameController.text,
+        email: _emailController.text,
+        password: _passwordController.text,
+        city: _selectedCity,
+        street: '-',
+        phoneNumber: '0000000000',
       );
-      return;
-    }
-
-    // Проверка совпадения паролей
-    if (!_passwordsMatch()) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Пароли не совпадают')),
+      // Автоматически переходим на главный экран после регистрации
+      if (!mounted) return;
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const CategoryScreen()),
+        (route) => false,
       );
-      return;
+    } catch (e) {
+      setState(() {
+        _emailError = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ошибка регистрации. Email уже используется')),
+      );
     }
-
-    // Если все проверки пройдены, сохраняем учетные данные клиента
-    await AuthService.registerClient(
-      fullName: _nameController.text,
-      email: _emailController.text,
-      password: _passwordController.text,
-      city: _selectedCity,
-      street: _streetController.text,
-      phoneNumber: _normalizePhone(_phoneController.text),
-    );
-    
-    // Переход на главный экран
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (context) => CategoryScreen()),
-      (route) => false, // Удаляем все предыдущие экраны из стека
-    );
   }
+
 
   @override
   void dispose() {
     _nameController.removeListener(_onFieldChanged);
     _emailController.removeListener(_onFieldChanged);
-    _phoneController.removeListener(_onFieldChanged);
-    _streetController.removeListener(_onFieldChanged);
     _passwordController.removeListener(_onFieldChanged);
     _confirmPasswordController.removeListener(_onFieldChanged);
     _nameController.dispose();
     _emailController.dispose();
-    _phoneController.dispose();
-    _streetController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     super.dispose();
@@ -279,58 +275,89 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                     ),
                     textAlign: TextAlign.center,
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_nameController, 'Ф.И.О.'),
+                    child: _buildTextField(_nameController, 'Ф.И.О'),
                   ),
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_emailController, 'mail'),
                   ),
+                  if (_emailValidationError || _emailError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: Text(
+                        _emailError ? 'E-mail уже используется' : 'Введите корректный E-mail',
+                        style: const TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_phoneController, 'Телефон (10 цифр)'),
+                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
                   ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_streetController, 'Улица'),
-                  ),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
-                  ),
+                  if (_weakPasswordError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: const Text(
+                        'Пароль должен содержать минимум 6 символов',
+                        style: TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_confirmPasswordController, 'Повторить пароль', isPassword: true),
                   ),
-                  SizedBox(height: 32),
+                  if (_passwordsNotMatchedError) ...[
+                    const SizedBox(height: 5),
+                    SizedBox(
+                      width: MediaQuery.of(context).size.width * 0.52,
+                      child: const Text(
+                        'Пароли не совпадают',
+                        style: TextStyle(
+                          color: Color(0xFFE64646),
+                          fontWeight: FontWeight.w400,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 32),
+                  // Две кнопки рядом
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _areAllFieldsFilled()
-                        ? _buildActionButton('Зарегистрироваться')
-                        : Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              Expanded(
-                                child: _buildActionButton('Регистрация клиента'),
-                              ),
-                              SizedBox(width: 10),
-                              Expanded(
-                                child: _buildActionButton('Регистрация компании'),
-                              ),
-                            ],
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildActionButton(
+                            'Регистрация клиента',
+                            isEnabled: _isFormValid(),
                           ),
-                  ),
-                  SizedBox(height: 16),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildActionButton('Вход', isSecondary: true),
-                  ),
-                  SizedBox(height: 16),
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildActionButton('Вход для компании', isSecondary: true),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildActionButton(
+                            'Регистрация компании',
+                            isEnabled: true,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
@@ -397,39 +424,29 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     );
   }
 
-  Widget _buildActionButton(String text, {bool isSecondary = false}) {
+  Widget _buildActionButton(String text, {bool isEnabled = true}) {
     return GestureDetector(
-      onTap: () {
-        if (text == 'Регистрация компании') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (context) => CompanyRegistrationScreen(
-                email: _emailController.text.isNotEmpty ? _emailController.text : null,
-                password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
-              ),
-            ),
-          );
-        } else if (text == 'Зарегистрироваться') {
-          _validateAndRegister();
-        } else if (text == 'Регистрация клиента') {
-          _validateAndRegister();
-        } else if (text == 'Вход') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => LoginScreen()),
-          );
-        } else if (text == 'Вход для компании') {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
-          );
-        }
-      },
+      onTap: isEnabled
+          ? () {
+              if (text == 'Регистрация компании') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => CompanyRegistrationScreen(
+                      email: _emailController.text.isNotEmpty ? _emailController.text : null,
+                      password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
+                    ),
+                  ),
+                );
+              } else if (text == 'Регистрация клиента') {
+                _validateAndRegister();
+              }
+            }
+          : null,
       child: Container(
         height: 50,
         decoration: BoxDecoration(
-          color: isSecondary ? Colors.grey[300] : const Color(0xFF87CEEB), // Яркий небесно-голубой цвет
+          color: isEnabled ? const Color(0xFF87CEEB) : const Color(0xFFABCDf3),
           borderRadius: BorderRadius.circular(10),
           boxShadow: [
             BoxShadow(
@@ -443,7 +460,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         child: Text(
           text,
           style: TextStyle(
-            color: isSecondary ? Colors.black87 : Colors.white,
+            color: isEnabled ? Colors.white : Colors.white70,
             fontSize: 14,
             fontWeight: FontWeight.w500,
           ),

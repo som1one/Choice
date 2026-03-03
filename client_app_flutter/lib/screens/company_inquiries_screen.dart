@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/auth_service.dart';
+import '../services/remote_ordering_service.dart';
+import '../utils/auth_guard.dart';
 import 'client_inquiry_screen.dart';
-import 'company_login_screen.dart';
+import 'company_client_detail_screen.dart';
 
 class CompanyInquiriesScreen extends StatefulWidget {
   const CompanyInquiriesScreen({super.key});
@@ -47,34 +49,6 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
     );
   }
 
-  Future<void> _logout() async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Выход'),
-        content: const Text('Вы уверены, что хотите выйти?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Отмена'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child: const Text('Выйти'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm == true) {
-      await AuthService.logout();
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
-        (route) => false,
-      );
-    }
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -128,7 +102,7 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: _logout,
+                  onPressed: () => AuthGuard.openCompanySettings(context),
                 ),
               ),
             ],
@@ -221,6 +195,48 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
                                 onTap: () async {
                                   await InquiryService.updateCurrentInquiry(inquiry);
                                   if (!mounted) return;
+                                  
+                                  // Проверяем, есть ли подтвержденная запись
+                                  final orderingService = RemoteOrderingService();
+                                  final orders = await orderingService.getOrders();
+                                  
+                                  if (orders != null && orders.isNotEmpty) {
+                                    // Ищем заказ для этой заявки
+                                    final orderRequestId = int.tryParse(inquiry.id);
+                                    if (orderRequestId != null) {
+                                      try {
+                                        final relevantOrder = orders.firstWhere(
+                                          (order) {
+                                            final reqId = order['order_request_id'] ?? order['orderRequestId'];
+                                            return reqId != null && reqId == orderRequestId;
+                                          },
+                                        );
+                                        
+                                        // Если заказ найден и запись подтверждена
+                                        final isConfirmed = relevantOrder['is_date_confirmed'] ?? false;
+                                        final isEnrolled = relevantOrder['is_enrolled'] ?? false;
+                                        
+                                        if (isConfirmed || isEnrolled) {
+                                          // Открываем экран деталей клиента
+                                          await Navigator.push(
+                                            context,
+                                            MaterialPageRoute(
+                                              builder: (context) => CompanyClientDetailScreen(
+                                                order: relevantOrder,
+                                              ),
+                                            ),
+                                          );
+                                          if (!mounted) return;
+                                          _loadInquiries();
+                                          return;
+                                        }
+                                      } catch (_) {
+                                        // Заказ не найден, продолжаем с обычным экраном
+                                      }
+                                    }
+                                  }
+                                  
+                                  // Иначе открываем обычный экран заявки
                                   await Navigator.push(
                                     context,
                                     MaterialPageRoute(

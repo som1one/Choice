@@ -1,7 +1,7 @@
 """Главный файл Company Service"""
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from .routers import company
+from .routers import company, rating_criteria, company_services, company_products
 from .database import init_db
 
 app = FastAPI(
@@ -24,6 +24,9 @@ init_db()
 
 # Роутеры
 app.include_router(company.router)
+app.include_router(rating_criteria.router)
+app.include_router(company_services.router)
+app.include_router(company_products.router)
 
 @app.get("/")
 async def root():

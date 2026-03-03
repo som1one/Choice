@@ -128,10 +128,60 @@ async def get_chat(
     
     message_repo = MessageRepository(db)
     messages = await message_repo.get_all(current_id, user_id)
+    messages = sorted(messages, key=lambda m: m.creation_time)
+    
+    status_int = 1 if user.status == "Online" else 0
     
     return ChatResponse(
         name=user.name,
         icon_uri=user.icon_uri,
-        status=user.status,
-        messages=[MessageResponse.model_validate(m) for m in messages]
+        guid=user.guid,
+        is_deleted=user.is_deleted if hasattr(user, 'is_deleted') else False,
+        messages=[MessageResponse.model_validate(m) for m in messages],
+        status=status_int,
+        last_time_online=user.last_time_online if hasattr(user, 'last_time_online') else None
     )
+
+@router.get("/getChats", response_model=list[ChatResponse])
+async def get_chats(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Получение всех чатов пользователя"""
+    user_id = current_user["id"]
+    
+    message_repo = MessageRepository(db)
+    all_messages = await message_repo.get_all()
+    
+    # Получаем уникальные ID пользователей, с которыми есть переписка
+    user_ids = set()
+    for msg in all_messages:
+        if msg.sender_id == user_id:
+            user_ids.add(msg.receiver_id)
+        elif msg.receiver_id == user_id:
+            user_ids.add(msg.sender_id)
+    
+    user_repo = UserRepository(db)
+    chats = []
+    
+    for uid in user_ids:
+        user = await user_repo.get(uid)
+        if not user:
+            continue
+        
+        messages = await message_repo.get_all(user_id, uid)
+        messages = sorted(messages, key=lambda m: m.creation_time)
+        
+        status_int = 1 if user.status == "Online" else 0
+        
+        chats.append(ChatResponse(
+            name=user.name,
+            icon_uri=user.icon_uri,
+            guid=user.guid,
+            is_deleted=user.is_deleted if hasattr(user, 'is_deleted') else False,
+            messages=[MessageResponse.model_validate(m) for m in messages],
+            status=status_int,
+            last_time_online=user.last_time_online if hasattr(user, 'last_time_online') else None
+        ))
+    
+    return chats

@@ -65,14 +65,18 @@ class ApiClient {
   static Future<Map<String, dynamic>?> putJson(
     String path,
     Map<String, dynamic> body,
-    {required String baseUrl,}
+    {required String baseUrl, Map<String, String>? headers,}
   ) async {
     if (!ApiConfig.isConfigured) return null;
     try {
+      final defaultHeaders = await _headers();
+      if (headers != null) {
+        defaultHeaders.addAll(headers);
+      }
       final response = await http
           .put(
             _uri(baseUrl, path),
-            headers: await _headers(),
+            headers: defaultHeaders,
             body: jsonEncode(body),
           )
           .timeout(_timeout);

@@ -34,6 +34,7 @@ class CompanyDetailsResponse(BaseModel):
     prepayment_available: bool
     reviews_count: int
     description: str
+    card_color: str = "#2196F3"  # Цвет карточки компании
     
     class Config:
         from_attributes = True
@@ -57,6 +58,7 @@ class CompanyViewModel(BaseModel):
     prepayment_available: bool
     reviews_count: int
     description: str
+    card_color: str = "#2196F3"  # Цвет карточки компании
     
     class Config:
         from_attributes = True
@@ -73,6 +75,7 @@ class ChangeDataRequest(BaseModel):
     photo_uris: List[str]
     categories_id: List[int]
     description: str
+    card_color: str = "#2196F3"  # Цвет карточки компании
     
     @property
     def is_valid(self) -> bool:
@@ -96,6 +99,7 @@ class FillCompanyDataRequest(BaseModel):
     categories_id: List[int]
     prepayment_available: bool
     description: str
+    card_color: str | None = None  # Цвет карточки компании (опционально)
     
     @property
     def is_valid(self) -> bool:

@@ -107,11 +107,39 @@ class AuthService {
     return userType == UserType.admin;
   }
 
-  // Проверить, авторизован ли пользователь (зарегистрирован или вошел)
+  // Проверить, авторизован ли пользователь (проверяем токен или статус входа)
   static Future<bool> isAuthenticated() async {
-    final registered = await isRegistered();
-    final loggedIn = await isLoggedIn();
-    return registered || loggedIn;
+    // Сначала проверяем токен
+    final token = await getAuthToken();
+    if (token != null && token.isNotEmpty) {
+      // Проверяем валидность токена (exp)
+      final payload = _decodeJwtPayload(token);
+      if (payload != null) {
+        final exp = payload['exp'] as int?;
+        if (exp != null) {
+          final currentTime = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          if (exp > currentTime) {
+            // Токен валиден, обновляем userType из токена
+            final userTypeStr = payload['user_type']?.toString();
+            if (userTypeStr != null) {
+              UserType? userType;
+              if (userTypeStr == 'Client') userType = UserType.client;
+              else if (userTypeStr == 'Company') userType = UserType.company;
+              else if (userTypeStr == 'Admin') userType = UserType.admin;
+              if (userType != null) {
+                await setLoggedIn(true, userType: userType);
+              }
+            }
+            return true;
+          }
+        } else {
+          // Если нет exp, считаем токен валидным
+          return true;
+        }
+      }
+    }
+    // Если токена нет или он невалиден, проверяем статус входа
+    return await isLoggedIn();
   }
 
   static Future<void> registerClient({
@@ -150,6 +178,7 @@ class AuthService {
     await prefs.setString(_clientCredentialsKey, payload);
     if (remoteToken != null && remoteToken.isNotEmpty) {
       await prefs.setString(_authTokenKey, remoteToken);
+      await AuthTokenStore.setToken(remoteToken);
     }
     await setRegistered(true, userType: UserType.client);
     await setLoggedIn(true, userType: UserType.client);
@@ -176,9 +205,22 @@ class AuthService {
         if (!remoteResult.success) return false;
         final prefs = await SharedPreferences.getInstance();
         if (remoteResult.token != null && remoteResult.token!.isNotEmpty) {
-          await prefs.setString(_authTokenKey, remoteResult.token!);
+          final token = remoteResult.token!;
+          await prefs.setString(_authTokenKey, token);
+          await AuthTokenStore.setToken(token);
+          
+          // Определяем userType из токена
+          final payload = _decodeJwtPayload(token);
+          UserType? userType = UserType.client; // По умолчанию клиент
+          if (payload != null) {
+            final userTypeStr = payload['user_type']?.toString();
+            if (userTypeStr == 'Company') userType = UserType.company;
+            else if (userTypeStr == 'Admin') userType = UserType.admin;
+          }
+          await setLoggedIn(true, userType: userType);
+        } else {
+          await setLoggedIn(true, userType: UserType.client);
         }
-        await setLoggedIn(true, userType: UserType.client);
         return true;
       }
     }
@@ -240,7 +282,7 @@ class AuthService {
         phoneNumber: phoneNumber,
       );
       if (remoteResult != null && !remoteResult.success) {
-        return;
+        throw Exception('Ошибка регистрации');
       }
       remoteToken = remoteResult?.token;
     }
@@ -257,10 +299,48 @@ class AuthService {
       if (companyType != null && companyType.trim().isNotEmpty) 'companyType': companyType.trim(),
     });
     await prefs.setString(_companyCredentialsKey, payload);
+    
+    // Сохраняем данные регистрации в настройки компании для отображения в профиле
+    String addressText = '';
+    if (normalizedCity != '-' && normalizedStreet != '-') {
+      addressText = '$normalizedCity, $normalizedStreet';
+    } else if (normalizedCity != '-') {
+      addressText = normalizedCity;
+    } else if (normalizedStreet != '-') {
+      addressText = normalizedStreet;
+    }
+    
+    final companySettings = jsonEncode({
+      'f_Название': companyName.trim(),
+      'f_Mail': email.trim().toLowerCase(),
+      'f_Телефон': phoneNumber.trim(),
+      if (addressText.isNotEmpty) 'f_Адрес': addressText,
+    });
+    await prefs.setString('company_settings', companySettings);
+    
+    // Сохраняем токен в двух местах
     if (remoteToken != null && remoteToken.isNotEmpty) {
       await prefs.setString(_authTokenKey, remoteToken);
+      await AuthTokenStore.setToken(remoteToken);
+      
+      // Определяем userType из токена
+      final payload = _decodeJwtPayload(remoteToken);
+      UserType? userType = UserType.company; // По умолчанию компания
+      if (payload != null) {
+        final userTypeStr = payload['user_type']?.toString();
+        if (userTypeStr == 'Client') userType = UserType.client;
+        else if (userTypeStr == 'Company') userType = UserType.company;
+        else if (userTypeStr == 'Admin') userType = UserType.admin;
+      }
+      
+      // Устанавливаем статусы с правильным userType из токена
+      await setRegistered(true, userType: userType);
+      await setLoggedIn(true, userType: userType);
+    } else {
+      // Если токена нет, используем UserType.company по умолчанию
+      await setRegistered(true, userType: UserType.company);
+      await setLoggedIn(true, userType: UserType.company);
     }
-    await setRegistered(true, userType: UserType.company);
   }
 
   static Future<bool> loginAdmin({
@@ -326,9 +406,22 @@ class AuthService {
         if (!remoteResult.success) return false;
         final prefs = await SharedPreferences.getInstance();
         if (remoteResult.token != null && remoteResult.token!.isNotEmpty) {
-          await prefs.setString(_authTokenKey, remoteResult.token!);
+          final token = remoteResult.token!;
+          await prefs.setString(_authTokenKey, token);
+          await AuthTokenStore.setToken(token);
+          
+          // Определяем userType из токена
+          final payload = _decodeJwtPayload(token);
+          UserType? userType = UserType.company; // По умолчанию компания
+          if (payload != null) {
+            final userTypeStr = payload['user_type']?.toString();
+            if (userTypeStr == 'Client') userType = UserType.client;
+            else if (userTypeStr == 'Admin') userType = UserType.admin;
+          }
+          await setLoggedIn(true, userType: userType);
+        } else {
+          await setLoggedIn(true, userType: UserType.company);
         }
-        await setLoggedIn(true, userType: UserType.company);
         return true;
       }
     }
@@ -364,5 +457,38 @@ class AuthService {
     await prefs.remove(_userTypeKey);
     await prefs.remove(_authTokenKey);
     await prefs.remove(_adminCredentialsKey);
+    await AuthTokenStore.clearToken();
+  }
+
+  /// Отправка кода для сброса пароля на email
+  static Future<bool> resetPassword(String email) async {
+    if (ApiConfig.isConfigured) {
+      return await _remoteAuth.resetPassword(email);
+    }
+    return false;
+  }
+
+  /// Верификация кода для сброса пароля
+  static Future<String?> verifyPasswordReset(String email, String code) async {
+    if (ApiConfig.isConfigured) {
+      return await _remoteAuth.verifyPasswordReset(email, code);
+    }
+    return null;
+  }
+
+  /// Установка нового пароля после сброса
+  static Future<bool> setNewPassword(String password, String resetToken) async {
+    if (ApiConfig.isConfigured) {
+      return await _remoteAuth.setNewPassword(password, resetToken);
+    }
+    return false;
+  }
+
+  /// Смена пароля для авторизованного пользователя
+  static Future<bool> changePassword(String currentPassword, String newPassword) async {
+    if (ApiConfig.isConfigured) {
+      return await _remoteAuth.changePassword(currentPassword, newPassword);
+    }
+    return false;
   }
 }

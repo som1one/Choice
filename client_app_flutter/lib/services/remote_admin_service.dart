@@ -6,7 +6,7 @@ class RemoteAdminService {
     final json = await ApiClient.getJson('/api/client/getClients', baseUrl: ApiConfig.clientBaseUrl);
     if (json == null) return null;
     final data = json['data'];
-    if (data is List) return data.cast<Map<String, dynamic>>();
+    if (data is List) return (data as List).map((e) => e as Map<String, dynamic>).toList();
     return null;
   }
 
@@ -23,7 +23,7 @@ class RemoteAdminService {
     final json = await ApiClient.getJson('/api/company/getAllAdmin', baseUrl: ApiConfig.companyBaseUrl);
     if (json == null) return null;
     final data = json['data'];
-    if (data is List) return data.cast<Map<String, dynamic>>();
+    if (data is List) return (data as List).map((e) => e as Map<String, dynamic>).toList();
     return null;
   }
 
@@ -39,7 +39,7 @@ class RemoteAdminService {
     final json = await ApiClient.getJson('/api/review/getAll', baseUrl: ApiConfig.reviewBaseUrl);
     if (json == null) return null;
     final data = json['data'];
-    if (data is List) return data.cast<Map<String, dynamic>>();
+    if (data is List) return (data as List).map((e) => e as Map<String, dynamic>).toList();
     return null;
   }
 

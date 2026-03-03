@@ -17,12 +17,15 @@ class MessageRepository:
         """Получение сообщения по ID"""
         return self.db.query(Message).filter(Message.id == message_id).first()
     
-    async def get_all(self, sender_id: str, receiver_id: str) -> list[Message]:
-        """Получение всех сообщений между пользователями"""
-        return self.db.query(Message).filter(
-            ((Message.sender_id == sender_id) & (Message.receiver_id == receiver_id)) |
-            ((Message.sender_id == receiver_id) & (Message.receiver_id == sender_id))
-        ).order_by(Message.creation_time).all()
+    async def get_all(self, sender_id: str = None, receiver_id: str = None) -> list[Message]:
+        """Получение всех сообщений между пользователями или всех сообщений"""
+        if sender_id and receiver_id:
+            return self.db.query(Message).filter(
+                ((Message.sender_id == sender_id) & (Message.receiver_id == receiver_id)) |
+                ((Message.sender_id == receiver_id) & (Message.receiver_id == sender_id))
+            ).order_by(Message.creation_time).all()
+        else:
+            return self.db.query(Message).order_by(Message.creation_time).all()
     
     async def update(self, message: Message) -> bool:
         """Обновление сообщения"""

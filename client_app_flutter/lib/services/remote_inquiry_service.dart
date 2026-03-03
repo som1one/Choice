@@ -2,6 +2,7 @@ import '../models/inquiry_model.dart';
 import 'api_client.dart';
 import 'api_config.dart';
 import 'user_profile_service.dart';
+import 'remote_client_service.dart';
 import '../constants/categories.dart';
 
 class RemoteInquiryService {
@@ -38,6 +39,41 @@ class RemoteInquiryService {
     // В текущей модели приложения обновление заявки в бэке не используется.
     // (на бэке это /api/client/changeOrderRequest).
     return null;
+  }
+
+  Future<Map<String, dynamic>?> updateOrderRequest({
+    required int id,
+    required int categoryId,
+    required String description,
+    required int searchRadius,
+    required bool toKnowPrice,
+    required bool toKnowDeadline,
+    required bool toKnowEnrollmentDate,
+    required List<String> photoUris,
+  }) async {
+    final body = <String, dynamic>{
+      'id': id,
+      'category_id': categoryId,
+      'description': description,
+      'search_radius': searchRadius,
+      'to_know_price': toKnowPrice,
+      'to_know_deadline': toKnowDeadline,
+      'to_know_enrollment_date': toKnowEnrollmentDate,
+      'photo_uris': photoUris,
+    };
+
+    final json = await ApiClient.putJson(
+      '/api/client/changeOrderRequest',
+      body,
+      baseUrl: ApiConfig.clientBaseUrl,
+    );
+    return json;
+  }
+
+  Future<Map<String, dynamic>?> getOrderRequest(int id) async {
+    // Используем RemoteClientService для получения заявки
+    final clientService = RemoteClientService();
+    return await clientService.getOrderRequest(id);
   }
 
   Future<List<InquiryModel>?> getAllInquiries() async {

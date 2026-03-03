@@ -41,6 +41,8 @@ class ChatUser(Base):
     icon_uri = Column(String, nullable=True)
     status = Column(String, default=UserStatus.OFFLINE.value)
     device_tokens = Column(PG_ARRAY(String), default=[])
+    is_deleted = Column(Boolean, default=False)
+    last_time_online = Column(DateTime, nullable=True)
     
     def __repr__(self):
         return f"<ChatUser(guid={self.guid}, name={self.name}, status={self.status})>"

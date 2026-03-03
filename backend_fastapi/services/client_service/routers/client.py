@@ -60,6 +60,31 @@ async def get_client_admin(
     
     return client
 
+@router.get("/getClientByGuid", response_model=ClientResponse)
+async def get_client_by_guid(
+    guid: str,
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Получение клиента по GUID (для компаний)"""
+    # Проверяем, что пользователь - компания
+    if current_user.get("user_type") != "Company":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only companies can access this endpoint"
+        )
+    
+    repository = ClientRepository(db)
+    client = await repository.get(guid)
+    
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found"
+        )
+    
+    return client
+
 @router.put("/changeUserData", response_model=ClientResponse)
 async def change_user_data(
     request: ChangeUserDataRequest,

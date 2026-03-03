@@ -27,6 +27,7 @@ class Company(Base):
     categories_id = Column(PG_ARRAY(Integer), default=[])
     prepayment_available = Column(Boolean, default=False)
     is_data_filled = Column(Boolean, default=False)
+    card_color = Column(String, default="#2196F3")  # Цвет карточки компании (hex)
     
     def __repr__(self):
         return f"<Company(id={self.id}, guid={self.guid}, title={self.title})>"

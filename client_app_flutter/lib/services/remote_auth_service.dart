@@ -94,4 +94,46 @@ class RemoteAuthService {
           (json['accessToken'] as String?),
     );
   }
+
+  /// Отправка кода для сброса пароля на email
+  Future<bool> resetPassword(String email) async {
+    final json = await ApiClient.postJson('/api/auth/resetPassword', {
+      'email': email,
+    }, baseUrl: ApiConfig.authBaseUrl);
+    return json != null;
+  }
+
+  /// Верификация кода для сброса пароля
+  Future<String?> verifyPasswordReset(String email, String code) async {
+    final json = await ApiClient.postJson('/api/auth/verifyPasswordReset', {
+      'email': email,
+      'code': code,
+    }, baseUrl: ApiConfig.authBaseUrl);
+    if (json == null) return null;
+    return json['reset_token'] as String?;
+  }
+
+  /// Установка нового пароля после сброса
+  Future<bool> setNewPassword(String password, String resetToken) async {
+    final json = await ApiClient.putJson(
+      '/api/auth/setNewPassword',
+      {'password': password},
+      baseUrl: ApiConfig.authBaseUrl,
+      headers: {'Authorization': 'Bearer $resetToken'},
+    );
+    return json != null;
+  }
+
+  /// Смена пароля для авторизованного пользователя
+  Future<bool> changePassword(String currentPassword, String newPassword) async {
+    final json = await ApiClient.putJson(
+      '/api/auth/changePassword',
+      {
+        'current_password': currentPassword,
+        'new_password': newPassword,
+      },
+      baseUrl: ApiConfig.authBaseUrl,
+    );
+    return json != null;
+  }
 }

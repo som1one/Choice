@@ -41,7 +41,8 @@ async def get_all_companies(
             categories_id=c.categories_id or [],
             prepayment_available=c.prepayment_available,
             reviews_count=c.reviews_count,
-            description=c.description
+            description=c.description,
+            card_color=getattr(c, 'card_color', '#2196F3') or '#2196F3'
         )
         for c in companies if c.is_data_filled
     ]
@@ -72,7 +73,8 @@ async def get_all_companies_admin(
             categories_id=c.categories_id or [],
             prepayment_available=c.prepayment_available,
             reviews_count=c.reviews_count,
-            description=c.description
+            description=c.description,
+            card_color=getattr(c, 'card_color', '#2196F3') or '#2196F3'
         )
         for c in companies
     ]
@@ -104,7 +106,8 @@ async def get_companies_by_category(
             categories_id=c.categories_id or [],
             prepayment_available=c.prepayment_available,
             reviews_count=c.reviews_count,
-            description=c.description
+            description=c.description,
+            card_color=getattr(c, 'card_color', '#2196F3') or '#2196F3'
         )
         for c in companies
     ]
@@ -142,7 +145,8 @@ async def get_company(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.get("/getCompanyAdmin", response_model=CompanyDetailsResponse)
@@ -177,7 +181,8 @@ async def get_company_admin(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.get("/getCompany", response_model=CompanyViewModel)
@@ -224,7 +229,8 @@ async def get_company_for_client(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.put("/changeData", response_model=CompanyDetailsResponse)
@@ -265,6 +271,7 @@ async def change_data(
     company.categories_id = request.categories_id
     company.coordinates = coords
     company.description = request.description
+    company.card_color = request.card_color
     
     result = await repository.update(company)
     
@@ -292,7 +299,8 @@ async def change_data(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.put("/changeDataAdmin", response_model=CompanyDetailsResponse)
@@ -332,6 +340,7 @@ async def change_data_admin(
     company.categories_id = request.categories_id
     company.coordinates = coords
     company.description = request.description
+    company.card_color = request.card_color
     
     result = await repository.update(company)
     
@@ -359,7 +368,8 @@ async def change_data_admin(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.put("/changeIconUri", response_model=CompanyDetailsResponse)
@@ -406,7 +416,8 @@ async def change_icon_uri(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.put("/changeIconUriAdmin", response_model=CompanyDetailsResponse)
@@ -453,7 +464,8 @@ async def change_icon_uri_admin(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
 
 @router.delete("/delete")
@@ -507,6 +519,8 @@ async def fill_company_data(
     company.prepayment_available = request.prepayment_available
     company.description = request.description
     company.is_data_filled = True
+    if request.card_color is not None:
+        company.card_color = request.card_color
     
     result = await repository.update(company)
     
@@ -534,5 +548,6 @@ async def fill_company_data(
         categories_id=company.categories_id or [],
         prepayment_available=company.prepayment_available,
         reviews_count=company.reviews_count,
-        description=company.description
+        description=company.description,
+        card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )

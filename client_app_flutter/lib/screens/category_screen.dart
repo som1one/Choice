@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'service_query_screen.dart';
-import 'map_search_screen.dart';
 import '../utils/auth_guard.dart';
 
 class CategoryScreen extends StatelessWidget {
@@ -109,41 +108,6 @@ class CategoryScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  // Кнопки внизу
-                  SizedBox(
-                    width: MediaQuery.of(context).size.width * 0.75,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        Expanded(
-                          child: _buildBottomButton(
-                            context,
-                            'Выбрать услуги или товар',
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => MapSearchScreen()),
-                              );
-                            },
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _buildBottomButton(
-                            context,
-                            'Задать вопрос',
-                            () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(builder: (context) => ServiceQueryScreen()),
-                              );
-                            },
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -181,36 +145,6 @@ class CategoryScreen extends StatelessWidget {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 15,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildBottomButton(BuildContext context, String text, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 42,
-        decoration: BoxDecoration(
-          color: const Color(0xFF87CEEB),
-          borderRadius: BorderRadius.circular(8),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 3,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
             fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,

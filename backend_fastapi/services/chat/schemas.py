@@ -20,8 +20,11 @@ class ChatResponse(BaseModel):
     """Ответ с чатом"""
     name: str
     icon_uri: Optional[str]
-    status: str
+    guid: str
+    is_deleted: bool = False
     messages: List[MessageResponse]
+    status: int  # 0 = Offline, 1 = Online
+    last_time_online: Optional[datetime] = None
 
 class SendMessageRequest(BaseModel):
     """Запрос на отправку сообщения"""

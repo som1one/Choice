@@ -7,7 +7,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'dart:io' show Platform;
-import 'map_search_screen.dart';
 import 'client_view_inquiry_screen.dart';
 import '../utils/auth_guard.dart';
 import '../models/inquiry_model.dart';
@@ -469,62 +468,6 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 20),
-                // Кнопки внизу
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: _buildButton(
-                        context,
-                        'Выбрать услуги или товар',
-                        () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => MapSearchScreen()),
-                          );
-                        },
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildButton(
-                        context,
-                        'Задать вопрос',
-                        () async {
-                          if (_questionController.text.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text('Введите вопрос')),
-                            );
-                            return;
-                          }
-                          // Сохранить запрос
-                          final inquiry = InquiryModel(
-                            id: DateTime.now().millisecondsSinceEpoch.toString(),
-                            question: _questionController.text,
-                            category: widget.category,
-                            clientName: _clientName,
-                            createdAt: DateTime.now(),
-                            wantsPrice: _knowPrice,
-                            wantsTime: _knowTime,
-                            wantsSpecialist: _knowSpecialist,
-                            wantsAppointmentTime: _knowAppointment,
-                            attachmentUrl: _attachmentPath,
-                          );
-                          await InquiryService.saveInquiry(inquiry);
-                          
-                          // Переход на экран просмотра запроса клиента
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ClientViewInquiryScreen(),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                ),
               ],
             ),
           ),
@@ -555,36 +498,6 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
               ),
             ),
           ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildButton(BuildContext context, String text, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        height: 50,
-        decoration: BoxDecoration(
-          color: const Color(0xFF87CEEB),
-          borderRadius: BorderRadius.circular(10),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.1),
-              blurRadius: 4,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
         ),
       ),
     );

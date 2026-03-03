@@ -3,7 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
+import '../services/remote_company_service.dart';
+import '../services/api_config.dart';
 import 'company_login_screen.dart';
+import 'welcome_screen.dart';
+import 'chats_screen.dart';
+import 'company_admin_cabinet_screen.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   const CompanySettingsScreen({super.key});
@@ -35,6 +40,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   };
   String? _logoPath;
   final ImagePicker _picker = ImagePicker();
+  bool _isAdmin = false;
+  bool _isLoading = true;
+  final RemoteCompanyService _companyService = RemoteCompanyService();
 
   @override
   void initState() {
@@ -62,6 +70,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       return;
     }
 
+    setState(() {
+      _isAdmin = userType == UserType.admin;
+    });
+
     _loadSettings();
   }
 
@@ -74,20 +86,100 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   }
 
   Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString('company_settings');
-    if (raw == null) return;
-    final data = jsonDecode(raw) as Map<String, dynamic>;
-    if (!mounted) return;
     setState(() {
-      _logoPath = data['logoPath'] as String?;
-      for (final key in _checkboxes.keys) {
-        _checkboxes[key] = data['cb_$key'] as bool? ?? _checkboxes[key]!;
-      }
-      for (final key in _controllers.keys) {
-        _controllers[key]!.text = data['f_$key'] as String? ?? '';
-      }
+      _isLoading = true;
     });
+
+    try {
+      // Загружаем данные из API
+      final profile = await _companyService.getCompanyProfile();
+      
+      // Загружаем сохраненные настройки из SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('company_settings');
+      Map<String, dynamic> savedData = {};
+      if (raw != null) {
+        savedData = jsonDecode(raw) as Map<String, dynamic>;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        // Сначала загружаем данные из API профиля (если есть)
+        if (profile != null) {
+          final title = profile['title']?.toString() ?? '';
+          final email = profile['email']?.toString() ?? '';
+          final phone = profile['phone_number']?.toString() ?? '';
+          
+          if (title.isNotEmpty) _controllers['Название']!.text = title;
+          if (email.isNotEmpty) _controllers['Mail']!.text = email;
+          if (phone.isNotEmpty) _controllers['Телефон']!.text = phone;
+          
+          // Адрес из API
+          final address = profile['address'];
+          if (address is Map<String, dynamic>) {
+            final city = address['city']?.toString() ?? '';
+            final street = address['street']?.toString() ?? '';
+            if (city.isNotEmpty || street.isNotEmpty) {
+              _controllers['Адрес']!.text = [city, street].where((s) => s.isNotEmpty).join(', ');
+            }
+          }
+          
+          final siteUrl = profile['site_url']?.toString() ?? '';
+          final specialistName = profile['specialist_name']?.toString() ?? '';
+          final activities = profile['activities']?.toString() ?? '';
+          
+          if (siteUrl.isNotEmpty) _controllers['Сайт']!.text = siteUrl;
+          if (specialistName.isNotEmpty) _controllers['Имя специалиста']!.text = specialistName;
+          if (activities.isNotEmpty) _controllers['Виды деятельности']!.text = activities;
+          
+          // Логотип из API
+          final iconUri = profile['icon_uri'];
+          if (iconUri != null && iconUri.toString().isNotEmpty) {
+            _logoPath = '${ApiConfig.fileBaseUrl}/api/objects/$iconUri';
+          }
+        }
+        
+        // Затем загружаем из сохраненных настроек (для полей, которые не заполнены из API)
+        _logoPath = savedData['logoPath'] as String? ?? _logoPath;
+        for (final key in _checkboxes.keys) {
+          _checkboxes[key] = savedData['cb_$key'] as bool? ?? _checkboxes[key]!;
+        }
+        for (final key in _controllers.keys) {
+          final savedValue = savedData['f_$key'] as String?;
+          // Заполняем только если поле пустое (данные из регистрации как fallback)
+          if (savedValue != null && savedValue.isNotEmpty && _controllers[key]!.text.isEmpty) {
+            _controllers[key]!.text = savedValue;
+          }
+        }
+        
+        _isLoading = false;
+      });
+    } catch (e) {
+      // Если API недоступен, загружаем только из SharedPreferences
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('company_settings');
+      if (raw != null && mounted) {
+        final data = jsonDecode(raw) as Map<String, dynamic>;
+        setState(() {
+          _logoPath = data['logoPath'] as String?;
+          for (final key in _checkboxes.keys) {
+            _checkboxes[key] = data['cb_$key'] as bool? ?? _checkboxes[key]!;
+          }
+          for (final key in _controllers.keys) {
+            final savedValue = data['f_$key'] as String?;
+            if (savedValue != null && savedValue.isNotEmpty) {
+              _controllers[key]!.text = savedValue;
+            }
+          }
+          _isLoading = false;
+        });
+      } else if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   Future<void> _saveSettings() async {
@@ -115,8 +207,138 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     await _saveSettings();
   }
 
+  void _showInstructions() {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Заголовок
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade300),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: const Text(
+                        'Инструкция для компании',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+              // Контент с прокруткой
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      _InstructionItem(
+                        number: '1',
+                        title: 'Регистрация',
+                        content: 'Для использования приложения необходимо зарегистрироваться. '
+                            'При регистрации требуется логин (электронная почта) и пароль (не менее 6 символов).',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '2',
+                        title: 'Личный кабинет',
+                        icon: Icons.person,
+                        content: '• Создание карточки компании\n'
+                            '• Управление паролем\n'
+                            '• Создание предоплаты',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '3',
+                        title: 'Соцсети',
+                        content: 'Внизу окна можно выбрать иконки соцсетей, чтобы добавить '
+                            'социальную сеть компании в карточку компании.',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '4',
+                        title: 'Отображение на карте',
+                        content: 'Компания будет отображаться на карте по адресу, указанному в настройках. '
+                            'На карте будет отображаться логотип компании и рейтинг.',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '5',
+                        title: 'Рейтинг',
+                        content: 'Рейтинг появляется после диалога клиента с компанией. '
+                            'На карте отображается общий рейтинг клиента (клиент может не ставить оценку).',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '6',
+                        title: 'Диалог с клиентом',
+                        content: 'Клиент запрашивает услугу/товар и отмечает важные вопросы. '
+                            'Компания получает уведомление (звук, отметка) и должна быстро ответить. '
+                            'Ответ компании будет отображаться на карте в виде: логотип, цена, сроки, рейтинг '
+                            '(для товара: цена и наличие).',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '7',
+                        title: 'Выбор клиента',
+                        content: 'Ответы компаний отображаются на карте. Клиент может выбрать компанию, '
+                            'открыть карточку компании, посмотреть фото, перейти в соцсети, написать отзыв и поставить оценку. '
+                            'Компания также может оценить клиента после выполнения услуги или продажи товара, '
+                            'а также видеть рейтинг клиента во время общения.',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '8',
+                        title: 'Предоплата',
+                        content: 'Компания получает предоплату на карту или счет. '
+                            'Если компания не хочет работать с предоплатой, не нужно нажимать кнопку '
+                            '"работа с предоплатой". Предоплату можно отменить.',
+                      ),
+                      SizedBox(height: 16),
+                      _InstructionItem(
+                        number: '9',
+                        title: 'Кнопка чат с клиентом',
+                        content: 'Компания может просмотреть переписку с клиентом через эту кнопку.',
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
@@ -250,7 +472,12 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
               const SizedBox(height: 20),
 
-              _buildPrepaymentButton('Чат с клиентом'),
+              _buildPrepaymentButton('Чат с клиентом', onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatsScreen()),
+                );
+              }),
 
               const SizedBox(height: 24),
 
@@ -272,7 +499,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
               Row(
                 children: [
                   Expanded(
-                    child: _buildPrepaymentButton('Инструкция приложения'),
+                    child: _buildPrepaymentButton(
+                      'Инструкция приложения',
+                      onTap: _showInstructions,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Container(
@@ -288,6 +518,24 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
               ),
               const SizedBox(height: 16),
               _buildPrepaymentButton('Сохранить настройки', onTap: _saveSettings),
+              
+              // Кнопка для администратора
+              if (_isAdmin) ...[
+                const SizedBox(height: 24),
+                _buildPrepaymentButton(
+                  'Кабинет администратора',
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const CompanyAdminCabinetScreen(),
+                      ),
+                    );
+                  },
+                ),
+              ],
+              const SizedBox(height: 16),
+              _buildLogoutButton(),
             ],
           ),
         ),
@@ -480,6 +728,137 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     return CustomPaint(
       size: const Size(24, 24),
       painter: _PersonIconPainter(),
+    );
+  }
+
+  Widget _buildLogoutButton() {
+    return GestureDetector(
+      onTap: () async {
+        final confirm = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('Выход'),
+            content: const Text('Вы уверены, что хотите выйти?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Отмена'),
+              ),
+              TextButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Выйти', style: TextStyle(color: Colors.red)),
+              ),
+            ],
+          ),
+        );
+        if (confirm == true && mounted) {
+          await AuthService.logout();
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+              (route) => false,
+            );
+          }
+        }
+      },
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: Colors.red[300],
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: const Text(
+          'Выйти из аккаунта',
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ),
+    );
+  }
+}
+
+class _InstructionItem extends StatelessWidget {
+  final String number;
+  final String title;
+  final String content;
+  final IconData? icon;
+
+  const _InstructionItem({
+    required this.number,
+    required this.title,
+    required this.content,
+    this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: Colors.blue,
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  number,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      if (icon != null) ...[
+                        Icon(icon, size: 20, color: Colors.grey[700]),
+                        const SizedBox(width: 4),
+                      ],
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    content,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: Colors.grey[800],
+                      height: 1.5,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

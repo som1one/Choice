@@ -30,6 +30,12 @@ class OrderRepository:
             (Order.company_id == user_id) | (Order.client_id == user_id)
         ).all()
     
+    async def get_by_order_request(self, order_request_id: int) -> list[Order]:
+        """Получение всех заказов по заявке (ответы компаний)"""
+        return self.db.query(Order).filter(
+            Order.order_request_id == order_request_id
+        ).all()
+    
     async def get_by_users(self, guid1: str, guid2: str) -> list[Order]:
         """Получение заказов между двумя пользователями"""
         return self.db.query(Order).filter(
