@@ -43,35 +43,29 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
       final email = _emailController.text.trim();
       final password = _passwordController.text;
 
-      // Пробуем войти как клиент
-      bool success = await AuthService.loginClient(
-        loginOrEmail: email,
+      // Используем универсальный метод входа, который определяет тип пользователя из токена
+      final userType = await AuthService.loginUniversal(
+        email: email,
         password: password,
       );
 
-      if (success) {
-        final userType = await AuthService.getUserType();
+      if (userType != null) {
         if (userType == UserType.client) {
           if (widget.onLoginSuccess != null) {
             widget.onLoginSuccess!(false, false);
           }
           return;
-        }
-      }
-
-      // Пробуем войти как компания
-      success = await AuthService.loginCompany(
-        email: email,
-        password: password,
-      );
-
-      if (success) {
-        final userType = await AuthService.getUserType();
-        if (userType == UserType.company) {
+        } else if (userType == UserType.company) {
           // TODO: Проверить, заполнены ли данные компании
           final needsFillData = false; // TODO: проверить через UserProfileService
           if (widget.onLoginSuccess != null) {
             widget.onLoginSuccess!(true, needsFillData);
+          }
+          return;
+        } else if (userType == UserType.admin) {
+          // Админ - обрабатываем как компанию для совместимости
+          if (widget.onLoginSuccess != null) {
+            widget.onLoginSuccess!(true, false);
           }
           return;
         }

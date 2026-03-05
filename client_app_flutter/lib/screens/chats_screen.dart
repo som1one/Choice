@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/remote_chat_service.dart';
 import '../services/auth_service.dart';
+import 'chat_screen.dart';
 
 class ChatsScreen extends StatefulWidget {
   final Function(int)? onUnreadCountChanged;
@@ -97,23 +98,18 @@ class _ChatsScreenState extends State<ChatsScreen> {
     final userId = chat['guid'] ?? chat['user_id'] ?? '';
     if (userId.isEmpty) return;
 
-    // TODO: Открыть экран чата с конкретным пользователем
-    // Navigator.push(
-    //   context,
-    //   MaterialPageRoute(
-    //     builder: (context) => ChatScreen(
-    //       userId: userId.toString(),
-    //       userName: chat['name'] ?? 'Пользователь',
-    //       userIconUri: chat['icon_uri'] ?? chat['iconUri'],
-    //     ),
-    //   ),
-    // ).then((_) {
-    //   _loadChats();
-    // });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Открыть чат с ${chat['name'] ?? 'пользователем'}')),
-    );
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ChatScreen(
+          userId: userId.toString(),
+          userName: (chat['name'] ?? 'Пользователь').toString(),
+          userIconUri: (chat['icon_uri'] ?? chat['iconUri'])?.toString(),
+        ),
+      ),
+    ).then((_) {
+      _loadChats();
+    });
   }
 
   @override

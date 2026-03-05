@@ -18,6 +18,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
   
   bool _emailError = false;
   bool _emailValidationError = false;
@@ -50,6 +51,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     _emailController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
     _confirmPasswordController.addListener(_onFieldChanged);
+    _phoneController.addListener(_onFieldChanged);
   }
 
   void _onFieldChanged() {
@@ -85,7 +87,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     return _nameController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty &&
-        _confirmPasswordController.text.isNotEmpty;
+        _confirmPasswordController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty;
   }
 
   bool _isFormValid() {
@@ -131,7 +134,9 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         password: _passwordController.text,
         city: _selectedCity,
         street: '-',
-        phoneNumber: '0000000000',
+        phoneNumber: _phoneController.text.trim().isNotEmpty 
+            ? _phoneController.text.trim() 
+            : '0000000000',
       );
       // Автоматически переходим на главный экран после регистрации
       if (!mounted) return;
@@ -157,10 +162,12 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     _emailController.removeListener(_onFieldChanged);
     _passwordController.removeListener(_onFieldChanged);
     _confirmPasswordController.removeListener(_onFieldChanged);
+    _phoneController.removeListener(_onFieldChanged);
     _nameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -284,6 +291,11 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_emailController, 'mail'),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_phoneController, 'Телефон'),
                   ),
                   if (_emailValidationError || _emailError) ...[
                     const SizedBox(height: 5),

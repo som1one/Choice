@@ -19,6 +19,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _phoneController = TextEditingController();
 
   // Влияет на отображение/сохранение данных, но не ломает бек (пока отправляем только существующие поля)
   String _companyType = 'юрлицо';
@@ -44,6 +45,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     _emailController.addListener(_onFieldChanged);
     _passwordController.addListener(_onFieldChanged);
     _confirmPasswordController.addListener(_onFieldChanged);
+    _phoneController.addListener(_onFieldChanged);
   }
 
   void _onFieldChanged() {
@@ -79,7 +81,8 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     return _companyNameController.text.isNotEmpty &&
         _emailController.text.isNotEmpty &&
         _passwordController.text.isNotEmpty &&
-        _confirmPasswordController.text.isNotEmpty;
+        _confirmPasswordController.text.isNotEmpty &&
+        _phoneController.text.isNotEmpty;
   }
 
   bool _isFormValid() {
@@ -95,10 +98,12 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
     _emailController.removeListener(_onFieldChanged);
     _passwordController.removeListener(_onFieldChanged);
     _confirmPasswordController.removeListener(_onFieldChanged);
+    _phoneController.removeListener(_onFieldChanged);
     _companyNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
     _confirmPasswordController.dispose();
+    _phoneController.dispose();
     super.dispose();
   }
 
@@ -227,6 +232,11 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildTextField(_emailController, 'mail'),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: _buildTextField(_phoneController, 'Телефон'),
                   ),
                   if (_emailValidationError || _emailError) ...[
                     const SizedBox(height: 5),
@@ -383,7 +393,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         companyName: _companyNameController.text,
         email: _emailController.text,
         password: _passwordController.text,
-        phoneNumber: '0000000000',
+        phoneNumber: _phoneController.text.trim().isNotEmpty 
+            ? _phoneController.text.trim() 
+            : '0000000000',
         companyType: _companyType,
       );
       // Автоматически переходим на главный экран компании после регистрации

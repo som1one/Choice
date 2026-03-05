@@ -1,5 +1,5 @@
 """Роутеры для Client Service"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from sqlalchemy.orm import Session
 from common.database import get_db
 from common.dependencies import get_current_user, require_admin
@@ -288,25 +288,146 @@ async def send_order_request(
 
 @router.get("/getOrderRequests", response_model=list[OrderRequestResponse])
 async def get_order_requests(
+    request: Request,
     category_id: int | None = None,
+    categories_id: list[int] | None = Query(None, alias="categoriesId[]"),
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
-    """Получение заявок"""
-    repo = OrderRequestRepository(db)
+    """Получение заявок
     
-    if category_id:
-        requests = await repo.get_by_category(category_id)
-    else:
-        user_id = current_user["id"]
+    Поддерживает форматы:
+    - ?category_id=1 (одна категория)
+    - ?categories_id=1&categories_id=2 (массив категорий, стандартный FastAPI)
+    - ?categoriesId[]=1&categoriesId[]=2 (массив категорий, старый формат)
+    - ?categoriesId[0]=1&categoriesId[1]=2 (массив категорий, альтернативный формат)
+    """
+    from services.company_service.models import Company
+    from services.company_service.repositories import CompanyRepository
+    from common.address_service import get_distance
+    
+    repo = OrderRequestRepository(db)
+    user_type = current_user.get("user_type")
+    user_id = current_user["id"]
+    
+    # Обработка различных форматов categoriesId для обратной совместимости
+    # FastAPI автоматически обрабатывает categoriesId[] через alias, но также поддерживаем categoriesId[0], categoriesId[1]
+    if not categories_id:
+        query_params = request.query_params
+        # Проверяем формат categoriesId[0], categoriesId[1], etc.
+        categories_from_query = []
+        for key, value in query_params.items():
+            if key.startswith("categoriesId[") and key.endswith("]"):
+                try:
+                    categories_from_query.append(int(value))
+                except ValueError:
+                    pass
+        if categories_from_query:
+            categories_id = categories_from_query
+    
+    # Для клиентов - возвращаем их заявки
+    if user_type == "Client":
         client_repo = ClientRepository(db)
         client = await client_repo.get(user_id)
-        if client:
-            requests = await repo.get_by_client(client.id)
+        
+        if not client:
+            return []
+        
+        # Если передан массив категорий, фильтруем по ним
+        if categories_id:
+            # Получаем все заявки клиента и фильтруем по категориям
+            all_client_requests = await repo.get_by_client(client.id)
+            requests = [
+                req for req in all_client_requests
+                if req.category_id in categories_id
+            ]
+        # Если передан одна категория, используем метод репозитория
+        elif category_id:
+            requests = await repo.get_by_category(category_id)
+            # Дополнительно фильтруем по клиенту (на случай, если метод возвращает все заявки категории)
+            requests = [req for req in requests if req.client_id == client.id]
+        # Если категории не указаны, возвращаем все заявки клиента
         else:
-            requests = []
+            requests = await repo.get_by_client(client.id)
+        
+        return requests
     
-    return requests
+    # Для компаний - фильтруем по категориям компании и радиусу
+    if user_type == "Company":
+        company_repo = CompanyRepository(db)
+        # user_id из токена - это guid (строка)
+        company = await company_repo.get(user_id)
+        
+        if not company:
+            return []
+        
+        # Получаем категории компании
+        company_categories = company.categories_id or []
+        
+        # Если переданы категории в параметрах, используем их (для обратной совместимости)
+        if categories_id:
+            company_categories = categories_id
+        elif category_id:
+            company_categories = [category_id]
+        
+        # Если у компании нет категорий, возвращаем пустой список
+        if not company_categories:
+            return []
+        
+        # Получаем все активные заявки
+        all_requests = db.query(OrderRequest).filter(
+            OrderRequest.status == 0  # Active
+        ).all()
+        
+        # Фильтруем по категориям компании
+        filtered_requests = [
+            req for req in all_requests
+            if req.category_id in company_categories
+        ]
+        
+        # Фильтруем по радиусу (расстояние между компанией и клиентом)
+        requests_in_radius = []
+        company_coords = company.coordinates
+        
+        for req in filtered_requests:
+            # Получаем клиента заявки по ID (client_id - это Integer)
+            client = db.query(Client).filter(Client.id == req.client_id).first()
+            
+            if not client or not client.coordinates:
+                continue
+            
+            # Вычисляем расстояние между компанией и клиентом
+            try:
+                # Парсим координаты (формат: "lat,lng")
+                company_lat, company_lng = map(float, company_coords.split(','))
+                client_lat, client_lng = map(float, client.coordinates.split(','))
+                
+                # Вычисляем расстояние в метрах (приблизительно, используя формулу гаверсинуса)
+                from math import radians, cos, sin, asin, sqrt
+                
+                def haversine_distance(lat1, lon1, lat2, lon2):
+                    """Вычисление расстояния между двумя точками в метрах"""
+                    R = 6371000  # Радиус Земли в метрах
+                    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+                    dlat = lat2 - lat1
+                    dlon = lon2 - lon1
+                    a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+                    c = 2 * asin(sqrt(a))
+                    return R * c
+                
+                distance = haversine_distance(company_lat, company_lng, client_lat, client_lng)
+                
+                # Проверяем, что расстояние меньше или равно радиусу поиска заявки
+                if distance <= req.search_radius:
+                    requests_in_radius.append(req)
+            except (ValueError, AttributeError):
+                # Если не удалось вычислить расстояние, пропускаем заявку
+                continue
+        
+        return requests_in_radius
+    
+    # Для других типов пользователей возвращаем пустой список
+    return []
 
 @router.get("/getClientRequests", response_model=list[OrderRequestResponse])
 async def get_client_requests(

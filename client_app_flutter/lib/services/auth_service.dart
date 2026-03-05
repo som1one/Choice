@@ -385,6 +385,119 @@ class AuthService {
     };
   }
 
+  /// Универсальный метод входа, который определяет тип пользователя из токена
+  static Future<UserType?> loginUniversal({
+    required String email,
+    required String password,
+  }) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    
+    // Проверяем тестовые аккаунты
+    if (!kReleaseMode) {
+      if (normalizedEmail == _testClientAdminEmail && password == _testClientAdminPassword) {
+        await setLoggedIn(true, userType: UserType.client);
+        return UserType.client;
+      }
+      if (normalizedEmail == _testCompanyAdminEmail && password == _testCompanyAdminPassword) {
+        await setLoggedIn(true, userType: UserType.company);
+        return UserType.company;
+      }
+    }
+
+    // Пробуем войти через API (один запрос определяет тип пользователя)
+    if (ApiConfig.isConfigured) {
+      final remoteResult = await _remoteAuth.loginClient(
+        email: normalizedEmail,
+        password: password,
+      );
+      if (remoteResult != null && remoteResult.success) {
+        final prefs = await SharedPreferences.getInstance();
+        if (remoteResult.token != null && remoteResult.token!.isNotEmpty) {
+          final token = remoteResult.token!;
+          await prefs.setString(_authTokenKey, token);
+          await AuthTokenStore.setToken(token);
+          
+          // Определяем userType из токена
+          final payload = _decodeJwtPayload(token);
+          UserType? userType;
+          if (payload != null) {
+            final userTypeStr = payload['user_type']?.toString();
+            if (userTypeStr == 'Client') userType = UserType.client;
+            else if (userTypeStr == 'Company') userType = UserType.company;
+            else if (userTypeStr == 'Admin') userType = UserType.admin;
+          }
+          
+          // Если тип не определен из токена, пробуем определить из локальных данных
+          if (userType == null) {
+            // Проверяем локальные данные клиента
+            final clientRaw = prefs.getString(_clientCredentialsKey);
+            if (clientRaw != null) {
+              final clientData = jsonDecode(clientRaw) as Map<String, dynamic>;
+              final savedEmail = (clientData['email'] as String? ?? '').toLowerCase();
+              if (normalizedEmail == savedEmail) {
+                userType = UserType.client;
+              }
+            }
+            
+            // Если не клиент, проверяем компанию
+            if (userType == null) {
+              final companyRaw = prefs.getString(_companyCredentialsKey);
+              if (companyRaw != null) {
+                final companyData = jsonDecode(companyRaw) as Map<String, dynamic>;
+                final savedEmail = (companyData['email'] as String? ?? '').toLowerCase();
+                if (normalizedEmail == savedEmail) {
+                  userType = UserType.company;
+                }
+              }
+            }
+          }
+          
+          // Если тип все еще не определен, используем Client по умолчанию
+          userType ??= UserType.client;
+          await setLoggedIn(true, userType: userType);
+          return userType;
+        }
+      }
+    }
+
+    // Fallback на локальные данные
+    final prefs = await SharedPreferences.getInstance();
+    
+    // Проверяем клиента
+    final clientRaw = prefs.getString(_clientCredentialsKey);
+    if (clientRaw != null) {
+      final clientData = jsonDecode(clientRaw) as Map<String, dynamic>;
+      final savedEmail = (clientData['email'] as String? ?? '').toLowerCase();
+      final savedPassword = clientData['password'] as String? ?? '';
+      if (normalizedEmail == savedEmail && _verifyPassword(savedPassword, password)) {
+        if (!savedPassword.startsWith('sha256:')) {
+          clientData['password'] = _hashPassword(password);
+          await prefs.setString(_clientCredentialsKey, jsonEncode(clientData));
+        }
+        await setLoggedIn(true, userType: UserType.client);
+        return UserType.client;
+      }
+    }
+    
+    // Проверяем компанию
+    final companyRaw = prefs.getString(_companyCredentialsKey);
+    if (companyRaw != null) {
+      final companyData = jsonDecode(companyRaw) as Map<String, dynamic>;
+      final savedEmail = (companyData['email'] as String? ?? '').toLowerCase();
+      final savedPassword = companyData['password'] as String? ?? '';
+      if (normalizedEmail == savedEmail && _verifyPassword(savedPassword, password)) {
+        if (!savedPassword.startsWith('sha256:')) {
+          companyData['password'] = _hashPassword(password);
+          await prefs.setString(_companyCredentialsKey, jsonEncode(companyData));
+        }
+        await setLoggedIn(true, userType: UserType.company);
+        return UserType.company;
+      }
+    }
+    
+    return null;
+  }
+
   static Future<bool> loginCompany({
     required String email,
     required String password,

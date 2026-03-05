@@ -12,6 +12,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'chats_screen.dart';
+import '../services/remote_client_service.dart';
+import '../services/api_config.dart';
 
 class ClientAdminCabinetScreen extends StatefulWidget {
   const ClientAdminCabinetScreen({super.key});
@@ -44,6 +46,7 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   String? _avatarPath;
   int _searchRadiusKm = 20;
   final ImagePicker _picker = ImagePicker();
+  final RemoteClientService _clientService = RemoteClientService();
 
   @override
   void initState() {
@@ -107,6 +110,7 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   }
 
   Future<void> _saveSettings() async {
+    // Сохраняем локально
     final prefs = await SharedPreferences.getInstance();
     final data = <String, dynamic>{'avatarPath': _avatarPath};
     for (final entry in _checkboxes.entries) {
@@ -123,6 +127,82 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
     data['searchRadiusKm'] = _searchRadiusKm;
     data['selectedAccountOption'] = _selectedAccountOption;
     await prefs.setString('client_settings', jsonEncode(data));
+
+    // Отправляем на сервер, если API настроен
+    if (ApiConfig.isConfigured) {
+      try {
+        // Получаем имя и фамилию из поля "Имя"
+        final nameField = _controllers['Имя']!.text.trim();
+        String name = '';
+        String surname = '';
+        if (nameField.isNotEmpty) {
+          final parts = nameField.split(' ');
+          name = parts.isNotEmpty ? parts[0] : '';
+          surname = parts.length > 1 ? parts.sublist(1).join(' ') : '';
+        }
+
+        // Получаем город и адрес
+        final addressField = _controllers['Адрес']!.text.trim();
+        String city = '';
+        String street = '';
+        if (addressField.isNotEmpty) {
+          // Пытаемся разделить адрес на город и улицу
+          final addressParts = addressField.split(',');
+          if (addressParts.length >= 2) {
+            city = addressParts[0].trim();
+            street = addressParts.sublist(1).join(',').trim();
+          } else {
+            // Если нет запятой, считаем весь адрес городом
+            city = addressField;
+            street = '';
+          }
+        }
+
+        // Получаем обязательные поля
+        final email = _controllers['Mail']!.text.trim();
+        final phoneNumber = _controllers['Телефон']!.text.trim();
+
+        // Проверяем, что обязательные поля заполнены (API требует все поля)
+        if (email.isNotEmpty && phoneNumber.isNotEmpty) {
+          // Отправляем основные данные клиента на сервер
+          await _clientService.changeUserData(
+            name: name.isNotEmpty ? name : 'Клиент', // Значение по умолчанию
+            surname: surname.isNotEmpty ? surname : '',
+            email: email,
+            phoneNumber: phoneNumber,
+            city: city.isNotEmpty ? city : '', // Если город не указан, отправляем пустую строку
+            street: street.isNotEmpty ? street : '',
+          );
+        } else {
+          print('Не все обязательные поля заполнены для отправки на сервер');
+        }
+
+        // Сохраняем настройки профиля через UserProfileService
+        final currentProfile = await UserProfileService.getProfile();
+        final updatedProfile = (currentProfile ?? UserProfileModel()).copyWith(
+          fullName: nameField.isNotEmpty ? nameField : currentProfile?.fullName,
+          address: addressField.isNotEmpty ? addressField : currentProfile?.address,
+          email: _controllers['Mail']!.text.trim().isNotEmpty 
+              ? _controllers['Mail']!.text.trim() 
+              : currentProfile?.email,
+          phone: _controllers['Телефон']!.text.trim().isNotEmpty 
+              ? _controllers['Телефон']!.text.trim() 
+              : currentProfile?.phone,
+          askPrice: _askPrice,
+          askSpecialist: _askSpecialist,
+          askAppointmentTime: _askAppointmentTime,
+          askAvailability: _askAvailability,
+          askWorkTime: _askWorkTime,
+          searchRadiusKm: _searchRadiusKm,
+        );
+        await UserProfileService.saveProfile(updatedProfile);
+      } catch (e) {
+        // Если ошибка при отправке на сервер, все равно показываем успех
+        // (данные сохранены локально)
+        print('Ошибка при сохранении настроек на сервер: $e');
+      }
+    }
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Настройки клиента сохранены')),

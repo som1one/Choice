@@ -183,6 +183,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
+    // Сохраняем локально
     final prefs = await SharedPreferences.getInstance();
     final data = <String, dynamic>{'logoPath': _logoPath};
     for (final entry in _checkboxes.entries) {
@@ -192,6 +193,60 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       data['f_${entry.key}'] = entry.value.text.trim();
     }
     await prefs.setString('company_settings', jsonEncode(data));
+
+    // Отправляем на сервер, если API настроен
+    if (ApiConfig.isConfigured) {
+      try {
+        // Получаем город и адрес
+        final addressField = _controllers['Адрес']!.text.trim();
+        String city = '';
+        String street = '';
+        if (addressField.isNotEmpty) {
+          // Пытаемся разделить адрес на город и улицу
+          final addressParts = addressField.split(',');
+          if (addressParts.length >= 2) {
+            city = addressParts[0].trim();
+            street = addressParts.sublist(1).join(',').trim();
+          } else {
+            // Если нет запятой, считаем весь адрес городом
+            city = addressField;
+            street = '';
+          }
+        }
+
+        // Получаем обязательные поля
+        final title = _controllers['Название']!.text.trim();
+        final email = _controllers['Mail']!.text.trim();
+        final phoneNumber = _controllers['Телефон']!.text.trim();
+
+        // Проверяем, что обязательные поля заполнены (API требует title, phone_number, email, city, street)
+        if (title.isNotEmpty && email.isNotEmpty && phoneNumber.isNotEmpty && city.isNotEmpty) {
+          // Формируем данные для отправки на сервер
+          final changeDataPayload = <String, dynamic>{
+            'title': title,
+            'email': email,
+            'phone_number': phoneNumber,
+            'site_url': _controllers['Сайт']!.text.trim(),
+            'city': city,
+            'street': street.isNotEmpty ? street : city, // Если street пустой, используем city
+            'social_medias': <String>[], // TODO: Добавить поддержку соцсетей
+            'photo_uris': <String>[], // TODO: Добавить поддержку фото
+            'categories_id': <int>[], // TODO: Добавить поддержку категорий
+            'description': _controllers['Виды деятельности']!.text.trim(),
+          };
+
+          // Отправляем данные на сервер
+          await _companyService.changeData(changeDataPayload);
+        } else {
+          print('Не все обязательные поля заполнены для отправки на сервер');
+        }
+      } catch (e) {
+        // Если ошибка при отправке на сервер, все равно показываем успех
+        // (данные сохранены локально)
+        print('Ошибка при сохранении настроек на сервер: $e');
+      }
+    }
+
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Настройки компании сохранены')),

@@ -1,9 +1,19 @@
 import 'package:flutter/material.dart';
 import 'service_query_screen.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../services/remote_client_service.dart';
 
-class CategoryScreen extends StatelessWidget {
+class CategoryScreen extends StatefulWidget {
   const CategoryScreen({super.key});
+
+  @override
+  State<CategoryScreen> createState() => _CategoryScreenState();
+}
+
+class _CategoryScreenState extends State<CategoryScreen> {
+  String? _city; // Загружается из API
+  bool _isLoadingCity = true;
 
   final List<String> categories = const [
     'Автоуслуги',
@@ -14,6 +24,39 @@ class CategoryScreen extends StatelessWidget {
     'Парфюм',
     'Автотовары',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCity();
+  }
+
+  Future<void> _loadCity() async {
+    final userType = await AuthService.getUserType();
+    if (userType == UserType.client) {
+      try {
+        final clientService = RemoteClientService();
+        final clientProfile = await clientService.getClientProfile();
+        if (clientProfile != null && mounted) {
+          final city = clientProfile['city']?.toString();
+          if (city != null && city.isNotEmpty) {
+            setState(() {
+              _city = city;
+              _isLoadingCity = false;
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        // Ошибка загрузки города
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _isLoadingCity = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,9 +83,9 @@ class CategoryScreen extends StatelessWidget {
                 size: 28,
               ),
             ),
-            title: const Text(
-              'Омск',
-              style: TextStyle(
+            title: Text(
+              _city ?? (_isLoadingCity ? 'Загрузка...' : ''),
+              style: const TextStyle(
                 color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.normal,

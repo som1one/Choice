@@ -60,19 +60,40 @@ async def get_orders(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение заказов пользователя или по заявке"""
+    from .models import Order
+    
     repo = OrderRepository(db)
+    user_id = current_user["id"]
+    user_type = current_user.get("user_type")
     
     # Если указан order_request_id, возвращаем заказы по заявке
     if order_request_id is not None:
         orders = await repo.get_by_order_request(order_request_id)
-        # Фильтруем только заказы текущего пользователя (клиента)
-        user_id = current_user["id"]
-        orders = [o for o in orders if o.client_id == user_id]
+        
+        # Фильтруем по типу пользователя
+        if user_type == "Client":
+            # Для клиентов - только заказы, где клиент - это текущий пользователь
+            orders = [o for o in orders if o.client_id == user_id]
+        elif user_type == "Company":
+            # Для компаний - только заказы, где компания - это текущий пользователь
+            orders = [o for o in orders if o.company_id == user_id]
+        else:
+            # Для других типов - пустой список
+            orders = []
+        
         return orders
     
-    # Иначе возвращаем все заказы пользователя
-    user_id = current_user["id"]
-    orders = await repo.get_by_user(user_id)
+    # Иначе возвращаем все заказы пользователя с явной фильтрацией по типу
+    if user_type == "Client":
+        # Для клиентов - только заказы, где клиент - это текущий пользователь
+        orders = db.query(Order).filter(Order.client_id == user_id).all()
+    elif user_type == "Company":
+        # Для компаний - только заказы, где компания - это текущий пользователь
+        orders = db.query(Order).filter(Order.company_id == user_id).all()
+    else:
+        # Для других типов - пустой список
+        orders = []
+    
     return orders
 
 @router.put("/enroll", response_model=OrderResponse)

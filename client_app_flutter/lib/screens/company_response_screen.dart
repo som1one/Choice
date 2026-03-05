@@ -7,6 +7,8 @@ import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'company_inquiries_screen.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../services/remote_company_service.dart';
 
 class CompanyResponseScreen extends StatefulWidget {
   const CompanyResponseScreen({super.key});
@@ -18,6 +20,8 @@ class CompanyResponseScreen extends StatefulWidget {
 class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   InquiryModel? _inquiry;
   bool _isLoading = true;
+  String? _city; // Загружается из API
+  final RemoteCompanyService _companyService = RemoteCompanyService();
   
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _timeController = TextEditingController();
@@ -33,6 +37,32 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   void initState() {
     super.initState();
     _loadInquiry();
+    _loadCity();
+  }
+
+  Future<void> _loadCity() async {
+    final userType = await AuthService.getUserType();
+    if (userType == UserType.company) {
+      try {
+        final companyProfile = await _companyService.getCompanyProfile();
+        if (companyProfile != null && mounted) {
+          final address = companyProfile['address'];
+          String? city;
+          if (address is Map<String, dynamic>) {
+            city = address['city']?.toString();
+          } else {
+            city = companyProfile['city']?.toString();
+          }
+          if (city != null && city.isNotEmpty) {
+            setState(() {
+              _city = city;
+            });
+          }
+        }
+      } catch (e) {
+        // Ошибка загрузки города
+      }
+    }
   }
 
 
@@ -60,8 +90,6 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
       } catch (_) {}
     }
 
-    final computedCoords = _computeStableCoordinates(_inquiry!.id);
-
     final updatedInquiry = _inquiry!.copyWith(
       companyResponse: _responseController.text.isNotEmpty ? _responseController.text : null,
       companyName: companyName,
@@ -71,19 +99,30 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
       specialistPhone: _specialistPhoneController.text.isNotEmpty ? _specialistPhoneController.text : null,
       appointmentDate: _appointmentDateController.text.isNotEmpty ? _appointmentDateController.text : null,
       appointmentTime: _appointmentTimeController.text.isNotEmpty ? _appointmentTimeController.text : null,
-      companyLatitude: _inquiry!.companyLatitude ?? computedCoords.$1,
-      companyLongitude: _inquiry!.companyLongitude ?? computedCoords.$2,
+      // Координаты компании больше не вычисляем из ID.
+      // Здесь должны использоваться только реальные координаты, если они когда-либо будут заданы.
+      companyLatitude: _inquiry!.companyLatitude,
+      companyLongitude: _inquiry!.companyLongitude,
     );
 
-    await InquiryService.updateCurrentInquiry(updatedInquiry);
-    
-    setState(() {
-      _inquiry = updatedInquiry;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Ответ сохранен')),
-    );
+    try {
+      // updateCurrentInquiry теперь автоматически отправляет ответ на сервер для компаний
+      await InquiryService.updateCurrentInquiry(updatedInquiry);
+      
+      setState(() {
+        _inquiry = updatedInquiry;
+      });
+      
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Ответ сохранен и отправлен на сервер')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Ошибка при отправке ответа: ${e.toString()}')),
+      );
+    }
   }
 
   Future<void> _confirmAppointment() async {
@@ -162,9 +201,9 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
                 size: 28,
               ),
             ),
-            title: const Text(
-              'Омск',
-              style: TextStyle(
+            title: Text(
+              _city ?? 'Загрузка...',
+              style: const TextStyle(
                 color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.normal,
@@ -350,9 +389,6 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
                 onPressed: () async {
                   await _saveResponse();
                   if (!mounted) return;
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Ответ отправлен, возвращаемся к заявкам')),
-                  );
                   Navigator.pushAndRemoveUntil(
                     context,
                     MaterialPageRoute(builder: (_) => const CompanyInquiriesScreen()),
@@ -379,14 +415,6 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
     );
   }
 
-  (double, double) _computeStableCoordinates(String seed) {
-    const centerLat = 54.9885;
-    const centerLon = 73.3686;
-    final hash = seed.codeUnits.fold<int>(0, (acc, v) => (acc * 31 + v) & 0x7fffffff);
-    final latShift = ((hash % 2001) - 1000) / 10000.0;
-    final lonShift = ((((hash ~/ 2001) % 2001) - 1000)) / 10000.0;
-    return (centerLat + latShift, centerLon + lonShift);
-  }
 }
 
 class _PersonIconPainter extends CustomPainter {

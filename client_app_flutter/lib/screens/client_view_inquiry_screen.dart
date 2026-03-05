@@ -22,6 +22,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   List<Map<String, dynamic>> _companyResponses = [];
   int _searchRadiusKm = 20;
   String? _clientCoordinates; // Координаты клиента (lat,lng)
+  String? _city; // Город клиента
 
   @override
   void initState() {
@@ -41,29 +42,39 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
     final profile = await UserProfileService.getProfile();
     _searchRadiusKm = profile?.searchRadiusKm ?? 20;
 
-    // Загружаем координаты клиента
+    // Загружаем координаты и город клиента
     final clientService = RemoteClientService();
     final clientProfile = await clientService.getClientProfile();
     if (clientProfile != null) {
       _clientCoordinates = clientProfile['coordinates']?.toString();
+      final city = clientProfile['city']?.toString();
+      if (city != null && city.isNotEmpty) {
+        setState(() {
+          _city = city;
+        });
+      }
     }
 
     if (inquiry != null) {
       // Получаем заказы по ID заявки (ответы компаний)
       final orderingService = RemoteOrderingService();
+      
+      // Пытаемся преобразовать ID в int для запроса к API
       final orderRequestId = int.tryParse(inquiry.id);
       
       List<Map<String, dynamic>>? relevantOrders;
       if (orderRequestId != null) {
-        // Получаем заказы напрямую по order_request_id
+        // Получаем заказы напрямую по order_request_id через API
         relevantOrders = await orderingService.getOrders(orderRequestId: orderRequestId);
       } else {
-        // Если не удалось распарсить ID, получаем все заказы и фильтруем
+        // Если ID не может быть преобразован в int, пытаемся найти заказы по строковому ID
+        // Получаем все заказы и фильтруем по строковому ID заявки
         final allOrders = await orderingService.getOrders();
-        if (allOrders != null) {
+        if (allOrders != null && inquiry.id.isNotEmpty) {
           relevantOrders = allOrders.where((order) {
             final reqId = order['order_request_id'] ?? order['orderRequestId'];
-            return reqId != null && reqId == orderRequestId;
+            // Сравниваем как строки, так как ID может быть строкой
+            return reqId != null && reqId.toString() == inquiry.id;
           }).toList();
         }
       }
@@ -157,9 +168,9 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Омск',
-                  style: TextStyle(
+                Text(
+                  _city ?? 'Загрузка...',
+                  style: const TextStyle(
                     color: Colors.black,
                     fontSize: 18,
                     fontWeight: FontWeight.normal,
@@ -335,10 +346,11 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
       }
     }
 
-    // Если нет координат клиента, используем центр карты (Омск примерно)
+    // Если нет координат клиента, не устанавливаем центр карты
+    // Координаты должны быть загружены из профиля клиента
     if (clientLat == null || clientLng == null) {
-      clientLat = 54.9885; // Омск
-      clientLng = 73.3686;
+      // Не используем хардкод координат - координаты должны быть в профиле
+      return markers; // Возвращаем только маркеры компаний без центра
     }
 
     final screenSize = MediaQuery.of(context).size;

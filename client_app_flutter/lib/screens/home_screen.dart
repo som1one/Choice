@@ -1,8 +1,51 @@
 import 'package:flutter/material.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../services/remote_client_service.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  String? _city; // Загружается из API
+  bool _isLoadingCity = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCity();
+  }
+
+  Future<void> _loadCity() async {
+    final userType = await AuthService.getUserType();
+    if (userType == UserType.client) {
+      try {
+        final clientService = RemoteClientService();
+        final clientProfile = await clientService.getClientProfile();
+        if (clientProfile != null && mounted) {
+          final city = clientProfile['city']?.toString();
+          if (city != null && city.isNotEmpty) {
+            setState(() {
+              _city = city;
+              _isLoadingCity = false;
+            });
+            return;
+          }
+        }
+      } catch (e) {
+        // Ошибка загрузки города
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _isLoadingCity = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -49,9 +92,9 @@ class HomeScreen extends StatelessWidget {
             title: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'Омск',
-                  style: TextStyle(
+                Text(
+                  _city ?? (_isLoadingCity ? 'Загрузка...' : ''),
+                  style: const TextStyle(
                     color: Colors.black,
                     fontSize: 18,
                     fontWeight: FontWeight.normal,

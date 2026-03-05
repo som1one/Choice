@@ -12,6 +12,8 @@ import '../utils/auth_guard.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
+import '../services/remote_client_service.dart';
+import '../services/auth_service.dart';
 
 class ServiceQueryScreen extends StatefulWidget {
   final String category;
@@ -35,6 +37,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   String? _attachmentPath;
   final ImagePicker _imagePicker = ImagePicker();
   String _clientName = 'Клиент';
+  String? _city; // Загружается из API
 
   @override
   void initState() {
@@ -58,6 +61,53 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
       _knowAppointment = profile.askAppointmentTime;
       _knowTime = profile.askWorkTime;
     });
+    
+    // Загружаем город из профиля клиента (обязательно)
+    final userType = await AuthService.getUserType();
+    if (userType == UserType.client) {
+      try {
+        final clientService = RemoteClientService();
+        final clientProfile = await clientService.getClientProfile();
+        if (clientProfile != null && mounted) {
+          final city = clientProfile['city']?.toString();
+          if (city != null && city.isNotEmpty) {
+            setState(() {
+              _city = city;
+            });
+          } else {
+            // Если город не найден в профиле, показываем ошибку
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Город не указан в профиле. Пожалуйста, заполните данные профиля.'),
+                  duration: Duration(seconds: 3),
+                ),
+              );
+            }
+          }
+        } else {
+          // Если профиль не загружен, показываем ошибку
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Не удалось загрузить профиль. Пожалуйста, проверьте подключение.'),
+                duration: Duration(seconds: 3),
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        // Если ошибка при загрузке, показываем сообщение
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Ошибка загрузки города: $e'),
+              duration: const Duration(seconds: 3),
+            ),
+          );
+        }
+      }
+    }
   }
 
   Future<void> _initializeSpeech() async {
@@ -273,9 +323,9 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                 size: 28,
               ),
             ),
-            title: const Text(
-              'Омск',
-              style: TextStyle(
+            title: Text(
+              _city ?? 'Загрузка...',
+              style: const TextStyle(
                 color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.normal,
