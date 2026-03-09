@@ -21,9 +21,6 @@ from ..services.token_service import generate_token, generate_password_reset_tok
 from ..services.phone_verification import send_code as send_phone_code, verify_code as verify_phone_code
 from ..services.email_verification import send_code as send_email_code, verify_code as verify_email_code
 import uuid
-import sys
-from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent.parent))
 from common.push_notification_service import initialize_firebase
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
