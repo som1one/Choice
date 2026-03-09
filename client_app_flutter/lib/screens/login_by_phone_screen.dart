@@ -27,7 +27,28 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
 
   bool get _isPhoneValid {
     final phone = _phoneController.text.trim();
-    return phone.isNotEmpty && phone.length >= 10;
+    if (phone.isEmpty) return false;
+    
+    // Убираем все кроме цифр
+    final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
+    
+    // Международные номера могут содержать от 7 до 15 цифр (включая код страны)
+    // Российские номера: 10 цифр (без кода страны) или 11 цифр (с кодом 7 или 8)
+    // Белорусские и другие международные: от 9 до 15 цифр (с кодом страны)
+    
+    // Проверяем общую длину (стандарт E.164 для международных номеров)
+    if (digits.length < 7 || digits.length > 15) {
+      return false;
+    }
+    
+    // Для российских номеров (10 или 11 цифр) - дополнительная проверка
+    if (digits.length == 11) {
+      // 11 цифр - должен начинаться с 7 или 8
+      return digits.startsWith('7') || digits.startsWith('8');
+    }
+    
+    // Для остальных длин (7-10, 12-15) - просто проверяем длину
+    return true;
   }
 
   bool get _isCodeValid {
@@ -37,18 +58,28 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
   String _normalizePhone(String phone) {
     // Убираем все кроме цифр
     final digits = phone.replaceAll(RegExp(r'[^\d]'), '');
-    // Если начинается с 8, заменяем на 7
+    
+    // Нормализация для российских номеров
+    // Если начинается с 8 и 11 цифр, заменяем на 7
     if (digits.startsWith('8') && digits.length == 11) {
       return '7${digits.substring(1)}';
     }
-    // Если начинается с +7 или 7
+    // Если начинается с 7 и 11 цифр - уже нормализован
     if (digits.startsWith('7') && digits.length == 11) {
       return digits;
     }
-    // Если 10 цифр, добавляем 7
+    // Если 10 цифр (российский номер без кода страны), добавляем 7
     if (digits.length == 10) {
       return '7$digits';
     }
+    
+    // Для международных номеров (9-15 цифр) возвращаем как есть
+    // Например, белорусский номер +375298062217 -> 375298062217
+    if (digits.length >= 9 && digits.length <= 15) {
+      return digits;
+    }
+    
+    // Для остальных случаев возвращаем как есть
     return digits;
   }
 

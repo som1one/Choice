@@ -1,9 +1,10 @@
 """Pydantic схемы для Authentication Service"""
-from pydantic import BaseModel, EmailStr, Field, field_validator
-from typing import Optional
+from pydantic import BaseModel, EmailStr, Field, field_validator, BeforeValidator
+from typing import Optional, Annotated, Any
 from datetime import datetime
 from .models import UserType
 import uuid
+import re
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -20,8 +21,7 @@ class UserCreate(UserBase):
     @field_validator('phone_number')
     @classmethod
     def validate_phone(cls, v):
-        if v and not v.isdigit() or (v and len(v) != 10):
-            raise ValueError('Phone number must be 10 digits')
+        # Телефон необязателен, валидация отключена
         return v
 
 class UserResponse(UserBase):
@@ -36,11 +36,22 @@ class LoginRequest(BaseModel):
     password: str
     device_token: Optional[str] = None
 
+def normalize_phone(v: Any) -> str:
+    """Нормализация номера телефона - убираем все нецифровые символы"""
+    if v is None:
+        raise ValueError('Номер телефона не может быть пустым')
+    # Убираем все кроме цифр
+    normalized = re.sub(r'[^\d]', '', str(v))
+    # Проверяем, что после нормализации номер имеет от 7 до 15 цифр (стандарт E.164)
+    if len(normalized) < 7 or len(normalized) > 15:
+        raise ValueError(f'Номер телефона должен содержать от 7 до 15 цифр после нормализации. Получено: {len(normalized)} цифр')
+    return normalized
+
 class LoginByPhoneRequest(BaseModel):
-    phone: str = Field(..., pattern=r'^\d{10}$')
+    phone: Annotated[str, BeforeValidator(normalize_phone)] = Field(..., description="Номер телефона (международный формат)")
 
 class VerifyCodeRequest(BaseModel):
-    phone: str = Field(..., pattern=r'^\d{10}$')
+    phone: Annotated[str, BeforeValidator(normalize_phone)] = Field(..., description="Номер телефона (международный формат)")
     code: str
 
 class RegisterRequest(BaseModel):
@@ -49,9 +60,20 @@ class RegisterRequest(BaseModel):
     password: str = Field(..., min_length=8, max_length=100)
     street: str
     city: str
-    phone_number: str = Field(..., pattern=r'^\d{10}$')
+    phone_number: Optional[str] = None
     device_token: Optional[str] = None
     type: UserType
+    
+    @field_validator('phone_number', mode='before')
+    @classmethod
+    def validate_phone(cls, v):
+        # Телефон необязателен, но если указан - нормализуем
+        if v is None or v == "":
+            return None
+        # Убираем все кроме цифр
+        import re
+        normalized = re.sub(r'[^\d]', '', str(v))
+        return normalized if normalized else None
     
     @field_validator('type')
     @classmethod
