@@ -22,16 +22,15 @@ logger = logging.getLogger(__name__)
 
 async def handle_user_data_changed(event_data: dict):
     """Обработчик события UserDataChangedEvent"""
+    user_id = event_data.get("user_id")
+    if not user_id:
+        logger.warning("UserDataChangedEvent: missing user_id")
+        return
+    
+    # Получаем сессию БД
+    from common.database import SessionLocal
+    db = SessionLocal()
     try:
-        user_id = event_data.get("user_id")
-        if not user_id:
-            logger.warning("UserDataChangedEvent: missing user_id")
-            return
-        
-        # Получаем сессию БД
-        from common.database import SessionLocal
-        db = SessionLocal()
-        try:
             # Преобразуем user_id из строки в UUID
             try:
                 user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
@@ -81,21 +80,20 @@ async def handle_user_data_changed(event_data: dict):
 
 async def handle_user_icon_uri_changed(event_data: dict):
     """Обработчик события UserIconUriChangedEvent"""
+    user_id = event_data.get("user_id")
+    if not user_id:
+        logger.warning("UserIconUriChangedEvent: missing user_id")
+        return
+    
+    icon_uri = event_data.get("icon_uri")
+    if not icon_uri:
+        logger.warning("UserIconUriChangedEvent: missing icon_uri")
+        return
+    
+    # Получаем сессию БД
+    from common.database import SessionLocal
+    db = SessionLocal()
     try:
-        user_id = event_data.get("user_id")
-        if not user_id:
-            logger.warning("UserIconUriChangedEvent: missing user_id")
-            return
-        
-        icon_uri = event_data.get("icon_uri")
-        if not icon_uri:
-            logger.warning("UserIconUriChangedEvent: missing icon_uri")
-            return
-        
-        # Получаем сессию БД
-        from common.database import SessionLocal
-        db = SessionLocal()
-        try:
             # Преобразуем user_id из строки в UUID
             try:
                 user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
@@ -119,16 +117,15 @@ async def handle_user_icon_uri_changed(event_data: dict):
 
 async def handle_user_deleted(event_data: dict):
     """Обработчик события UserDeletedEvent"""
+    user_id = event_data.get("user_id")
+    if not user_id:
+        logger.warning("UserDeletedEvent: missing user_id")
+        return
+    
+    # Получаем сессию БД
+    from common.database import SessionLocal
+    db = SessionLocal()
     try:
-        user_id = event_data.get("user_id")
-        if not user_id:
-            logger.warning("UserDeletedEvent: missing user_id")
-            return
-        
-        # Получаем сессию БД
-        from common.database import SessionLocal
-        db = SessionLocal()
-        try:
             # Преобразуем user_id из строки в UUID
             try:
                 user_uuid = uuid.UUID(user_id) if isinstance(user_id, str) else user_id
