@@ -6,7 +6,12 @@ from sqlalchemy import or_
 import os
 import sys
 from pathlib import Path
-sys.path.append(str(Path(__file__).parent.parent.parent))
+
+# Добавить корневую директорию в путь для импортов (как в main.py)
+current_file = Path(__file__).resolve()
+project_root = current_file.parent.parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 from common.database import get_db
 from common.dependencies import require_admin
