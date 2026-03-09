@@ -1,11 +1,21 @@
 """Сервис для отправки push-уведомлений через Firebase Cloud Messaging"""
 import os
-import firebase_admin
-from firebase_admin import credentials, messaging
 from typing import List, Optional
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Опциональный импорт Firebase (если библиотека не установлена, push notifications будут отключены)
+try:
+    import firebase_admin
+    from firebase_admin import credentials, messaging
+    FIREBASE_AVAILABLE = True
+except ImportError:
+    firebase_admin = None
+    credentials = None
+    messaging = None
+    FIREBASE_AVAILABLE = False
+    logger.warning("firebase_admin not installed. Push notifications will be disabled.")
 
 # Инициализация Firebase Admin SDK
 _firebase_initialized = False
@@ -15,6 +25,10 @@ def initialize_firebase():
     global _firebase_initialized
     
     if _firebase_initialized:
+        return
+    
+    if not FIREBASE_AVAILABLE:
+        logger.warning("Firebase Admin SDK not available. Push notifications will be disabled.")
         return
     
     try:
@@ -46,8 +60,8 @@ def send_push_notification(
     data: Optional[dict] = None
 ) -> bool:
     """Отправить push-уведомление одному устройству"""
-    if not _firebase_initialized:
-        logger.warning("Firebase not initialized, skipping push notification")
+    if not FIREBASE_AVAILABLE or not _firebase_initialized:
+        logger.warning("Firebase not available or not initialized, skipping push notification")
         return False
     
     try:
@@ -74,8 +88,8 @@ def send_push_notifications(
     data: Optional[dict] = None
 ) -> int:
     """Отправить push-уведомление нескольким устройствам"""
-    if not _firebase_initialized:
-        logger.warning("Firebase not initialized, skipping push notifications")
+    if not FIREBASE_AVAILABLE or not _firebase_initialized:
+        logger.warning("Firebase not available or not initialized, skipping push notifications")
         return 0
     
     if not device_tokens:
@@ -94,10 +108,10 @@ def send_multicast_notification(
     title: str,
     body: str,
     data: Optional[dict] = None
-) -> messaging.BatchResponse:
+):
     """Отправить push-уведомление нескольким устройствам через multicast"""
-    if not _firebase_initialized:
-        logger.warning("Firebase not initialized, skipping multicast notification")
+    if not FIREBASE_AVAILABLE or not _firebase_initialized:
+        logger.warning("Firebase not available or not initialized, skipping multicast notification")
         return None
     
     if not device_tokens:
