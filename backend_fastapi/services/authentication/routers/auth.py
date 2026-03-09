@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
 from common.database import get_db
-from common.dependencies import require_admin
+from common.dependencies import require_admin, get_current_user
 from common.security import verify_password, get_password_hash, decode_token, create_access_token
 from ..models import User, UserType
 from ..schemas import (
