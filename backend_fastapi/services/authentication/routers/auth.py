@@ -7,7 +7,17 @@ from pathlib import Path
 # Находим корень проекта по наличию папки common
 current_file = Path(__file__).resolve()
 project_root = current_file.parent.parent.parent
+
 # Проверяем, что это действительно корень (есть папка common)
+# Если нет, пробуем найти корень другим способом
+if not (project_root / "common").exists():
+    # Пробуем подняться еще на один уровень или найти по другому признаку
+    for potential_root in [project_root.parent, current_file.parent.parent.parent.parent]:
+        if (potential_root / "common").exists():
+            project_root = potential_root
+            break
+
+# Добавляем в sys.path если еще не добавлен
 if (project_root / "common").exists() and str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
@@ -29,8 +39,14 @@ from ..services.token_service import generate_token, generate_password_reset_tok
 from ..services.phone_verification import send_code as send_phone_code, verify_code as verify_phone_code
 from ..services.email_verification import send_code as send_email_code, verify_code as verify_email_code
 import uuid
+
 # Импортируем модуль для инициализации Firebase (инициализация происходит автоматически при импорте)
-import common.push_notification_service
+try:
+    import common.push_notification_service
+except ImportError:
+    # Fallback: если импорт не удался, это не критично - push notifications просто не будут работать
+    import logging
+    logging.getLogger(__name__).warning("Could not import push_notification_service. Push notifications will be disabled.")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
