@@ -10,8 +10,7 @@ import '../utils/auth_guard.dart';
 import 'change_password_screen.dart';
 import 'welcome_screen.dart';
 import 'package:file_picker/file_picker.dart';
-import 'dart:convert';
-import 'package:http/http.dart' as http;
+import '../services/remote_file_service.dart';
 
 class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
@@ -122,28 +121,8 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<String?> _uploadImage(String imagePath) async {
-    try {
-      final uri = Uri.parse('${ApiConfig.fileBaseUrl}/api/file/upload');
-      final request = http.MultipartRequest('POST', uri);
-      
-      // Добавляем токен авторизации
-      final token = await AuthTokenStore.getToken();
-      if (token != null) {
-        request.headers['Authorization'] = 'Bearer $token';
-      }
-      
-      request.files.add(await http.MultipartFile.fromPath('file', imagePath));
-      
-      final response = await request.send();
-      if (response.statusCode == 200) {
-        final responseBody = await response.stream.bytesToString();
-        final json = jsonDecode(responseBody);
-        return json['uri'] as String?;
-      }
-      return null;
-    } catch (e) {
-      return null;
-    }
+    final fileService = RemoteFileService();
+    return await fileService.uploadFile(imagePath);
   }
 
   Future<void> _saveChanges() async {

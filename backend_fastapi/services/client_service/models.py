@@ -1,5 +1,5 @@
 """Модели базы данных для Client Service"""
-from sqlalchemy import Column, Integer, String, Float, ForeignKey
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from common.database import Base
 import uuid
@@ -20,6 +20,7 @@ class Client(Base):
     icon_uri = Column(String, nullable=True)
     average_grade = Column(Float, default=0.0)
     review_count = Column(Integer, default=0)
+    is_blocked = Column(Boolean, default=False)  # Блокировка клиента
     
     requests = relationship("OrderRequest", back_populates="client")
     

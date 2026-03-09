@@ -7,6 +7,7 @@ import '../services/remote_company_service.dart';
 import '../services/remote_client_service.dart';
 import '../services/user_profile_service.dart';
 import '../utils/auth_guard.dart';
+import '../constants/categories.dart';
 import 'company_detail_screen.dart';
 
 class ClientViewInquiryScreen extends StatefulWidget {
@@ -85,10 +86,38 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         final companyService = RemoteCompanyService();
         final responses = <Map<String, dynamic>>[];
         
+        // Получаем категорию заявки для фильтрации компаний
+        final inquiryCategory = inquiry?.category ?? '';
+        final categoryId = categoryTitleToId(inquiryCategory);
+        
+        // Получаем компании по категории (если категория известна)
+        List<Map<String, dynamic>>? companiesByCategory;
+        if (categoryId > 0) {
+          companiesByCategory = await companyService.getCompaniesByCategory(categoryId);
+        }
+        
+        // Создаем Map для быстрого поиска компаний по ID
+        final companiesMap = <String, Map<String, dynamic>>{};
+        if (companiesByCategory != null) {
+          for (final company in companiesByCategory) {
+            final guid = (company['guid'] ?? company['id'] ?? '').toString();
+            if (guid.isNotEmpty) {
+              companiesMap[guid] = company;
+            }
+          }
+        }
+        
         for (final order in relevantOrders) {
           final companyId = order['company_id'] ?? order['companyId'];
           if (companyId != null) {
-            final company = await companyService.getCompany(companyId.toString());
+            // Сначала пытаемся найти компанию в отфильтрованном списке
+            Map<String, dynamic>? company = companiesMap[companyId.toString()];
+            
+            // Если не найдена в отфильтрованном списке, получаем напрямую
+            if (company == null) {
+              company = await companyService.getCompany(companyId.toString());
+            }
+            
             if (company != null) {
               responses.add({
                 'order': order,

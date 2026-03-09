@@ -136,4 +136,38 @@ class RemoteAuthService {
     );
     return json != null;
   }
+
+  /// Отправка кода на телефон
+  Future<bool> loginByPhone(String phone) async {
+    final json = await ApiClient.postJson('/api/auth/loginByPhone', {
+      'phone': phone,
+    }, baseUrl: ApiConfig.authBaseUrl);
+    return json != null;
+  }
+
+  /// Верификация кода и получение токена
+  Future<RemoteAuthResult?> verifyCode({
+    required String phone,
+    required String code,
+  }) async {
+    final json = await ApiClient.postJson('/api/auth/verify', {
+      'phone': phone,
+      'code': code,
+    }, baseUrl: ApiConfig.authBaseUrl);
+    
+    if (json == null) return null;
+    
+    final token = (json['access_token'] as String?) ??
+        (json['token'] as String?) ??
+        (json['accessToken'] as String?);
+    
+    if (token == null) {
+      return RemoteAuthResult(success: false);
+    }
+    
+    return RemoteAuthResult(
+      success: true,
+      token: token,
+    );
+  }
 }

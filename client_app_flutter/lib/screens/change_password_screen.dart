@@ -28,9 +28,13 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
 
   bool get _isValid {
     return _oldPasswordController.text.isNotEmpty &&
-        _passwordController.text.isNotEmpty &&
+        _passwordController.text.length >= 8 &&
         _confirmPasswordController.text.isNotEmpty &&
         _passwordController.text == _confirmPasswordController.text;
+  }
+  
+  bool get _isPasswordWeak {
+    return _passwordController.text.isNotEmpty && _passwordController.text.length < 8;
   }
 
   Future<void> _changePassword() async {
@@ -134,6 +138,8 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
                   enabled: !_isLoading,
                   obscureText: _obscurePassword,
                   decoration: InputDecoration(
+                    hintText: 'Минимум 8 символов',
+                    errorText: _isPasswordWeak ? 'Пароль должен содержать минимум 8 символов' : null,
                     suffixIcon: IconButton(
                       icon: Icon(
                         _obscurePassword ? Icons.visibility : Icons.visibility_off,

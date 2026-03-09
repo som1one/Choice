@@ -1,17 +1,20 @@
 """Роутеры для аутентификации"""
-from fastapi import APIRouter, Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
-from sqlalchemy.orm import Session
-from sqlalchemy import or_
 import os
 import sys
 from pathlib import Path
 
-# Добавить корневую директорию в путь для импортов (как в main.py)
+# Добавить корневую директорию в путь для импортов ДО всех остальных импортов
+# Находим корень проекта по наличию папки common
 current_file = Path(__file__).resolve()
-project_root = current_file.parent.parent.parent.parent
-if str(project_root) not in sys.path:
+project_root = current_file.parent.parent.parent
+# Проверяем, что это действительно корень (есть папка common)
+if (project_root / "common").exists() and str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from common.database import get_db
 from common.dependencies import require_admin
@@ -26,12 +29,10 @@ from ..services.token_service import generate_token, generate_password_reset_tok
 from ..services.phone_verification import send_code as send_phone_code, verify_code as verify_phone_code
 from ..services.email_verification import send_code as send_email_code, verify_code as verify_email_code
 import uuid
-from common.push_notification_service import initialize_firebase
+# Импортируем модуль для инициализации Firebase (инициализация происходит автоматически при импорте)
+import common.push_notification_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
-
-# Инициализация Firebase при загрузке модуля
-initialize_firebase()
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):

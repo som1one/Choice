@@ -61,7 +61,20 @@ async def send_review(
     
     review = await repo.add(review)
     
-    # TODO: Отправить событие ReviewLeftEvent в RabbitMQ
+    # Отправка события ReviewLeftEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("ReviewLeftEvent", {
+            "review_id": review.id,
+            "reviewer_id": str(review.reviewer_id),
+            "reviewed_id": str(review.reviewed_id),
+            "grade": review.grade,
+            "review_type": review.review_type,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish ReviewLeftEvent: {e}")
     
     return review
 

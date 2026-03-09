@@ -20,9 +20,9 @@ async def get_client(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение данных клиента"""
-    user_id = current_user["id"]
+    user_email = current_user["email"]
     repository = ClientRepository(db)
-    client = await repository.get(user_id)
+    client = await repository.get_by_email(user_email)
     
     if not client:
         raise HTTPException(
@@ -122,7 +122,23 @@ async def change_user_data(
             detail="Failed to update client"
         )
     
-    # TODO: Отправить событие UserDataChangedEvent в RabbitMQ
+    # Отправка события UserDataChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDataChangedEvent", {
+            "user_id": str(client.guid),
+            "user_type": "Client",
+            "email": client.email,
+            "name": client.name,
+            "surname": client.surname,
+            "phone_number": client.phone_number,
+            "city": client.city,
+            "street": client.street,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDataChangedEvent: {e}")
     
     return client
 
@@ -163,7 +179,23 @@ async def change_user_data_admin(
             detail="Failed to update client"
         )
     
-    # TODO: Отправить событие UserDataChangedEvent в RabbitMQ
+    # Отправка события UserDataChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDataChangedEvent", {
+            "user_id": str(client.guid),
+            "user_type": "Client",
+            "email": client.email,
+            "name": client.name,
+            "surname": client.surname,
+            "phone_number": client.phone_number,
+            "city": client.city,
+            "street": client.street,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDataChangedEvent: {e}")
     
     return client
 
@@ -193,7 +225,18 @@ async def change_icon_uri(
             detail="Failed to update icon"
         )
     
-    # TODO: Отправить событие UserIconUriChangedEvent в RabbitMQ
+    # Отправка события UserIconUriChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserIconUriChangedEvent", {
+            "user_id": str(client.guid),
+            "user_type": "Client",
+            "icon_uri": client.icon_uri,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserIconUriChangedEvent: {e}")
     
     return client
 
@@ -223,7 +266,18 @@ async def change_icon_uri_admin(
             detail="Failed to update icon"
         )
     
-    # TODO: Отправить событие UserIconUriChangedEvent в RabbitMQ
+    # Отправка события UserIconUriChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserIconUriChangedEvent", {
+            "user_id": str(client.guid),
+            "user_type": "Client",
+            "icon_uri": client.icon_uri,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserIconUriChangedEvent: {e}")
     
     return client
 
@@ -246,7 +300,18 @@ async def delete_client_admin(
     db.delete(client)
     db.commit()
     
-    # TODO: Отправить событие UserDeletedEvent в RabbitMQ
+    # Отправка события UserDeletedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDeletedEvent", {
+            "user_id": str(client.guid),
+            "user_type": "Client",
+            "email": client.email,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDeletedEvent: {e}")
     
     return {"message": "Client deleted successfully"}
 
@@ -282,7 +347,20 @@ async def send_order_request(
     
     order_request = await repo.add(order_request)
     
-    # TODO: Отправить событие OrderRequestSentEvent в RabbitMQ
+    # Отправка события OrderRequestSentEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("OrderRequestSentEvent", {
+            "order_request_id": order_request.id,
+            "client_id": str(client.guid),
+            "category_id": order_request.category_id,
+            "description": order_request.description,
+            "search_radius": order_request.search_radius,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish OrderRequestSentEvent: {e}")
     
     return order_request
 
@@ -502,3 +580,66 @@ async def change_order_request(
         )
     
     return order_request
+
+@router.put("/blockClient/{guid}")
+async def block_client(
+    guid: str,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Блокировка клиента (только для админа)"""
+    repository = ClientRepository(db)
+    client = await repository.get(guid)
+    
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found"
+        )
+    
+    client.is_blocked = True
+    db.commit()
+    
+    return {"message": "Client blocked successfully", "guid": guid, "is_blocked": True}
+
+@router.put("/unblockClient/{guid}")
+async def unblock_client(
+    guid: str,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Разблокировка клиента (только для админа)"""
+    repository = ClientRepository(db)
+    client = await repository.get(guid)
+    
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found"
+        )
+    
+    client.is_blocked = False
+    db.commit()
+    
+    return {"message": "Client unblocked successfully", "guid": guid, "is_blocked": False}
+
+@router.delete("/deletePhoto")
+async def delete_photo(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Удаление фото клиента"""
+    user_id = current_user["id"]
+    repository = ClientRepository(db)
+    client = await repository.get(user_id)
+    
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Client not found"
+        )
+    
+    client.icon_uri = None
+    db.commit()
+    
+    return {"message": "Photo deleted successfully"}

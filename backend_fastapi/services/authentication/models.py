@@ -1,5 +1,5 @@
 """Модели базы данных для Authentication Service"""
-from sqlalchemy import Column, String, Enum as SQLEnum
+from sqlalchemy import Column, String, Boolean, Enum as SQLEnum
 from sqlalchemy.dialects.postgresql import UUID
 import uuid
 import enum
@@ -24,6 +24,8 @@ class User(Base):
     user_type = Column(SQLEnum(UserType), nullable=False)
     password_hash = Column(String, nullable=False)
     icon_uri = Column(String, nullable=True)
+    device_token = Column(String, nullable=True)  # FCM device token для push-уведомлений
+    is_blocked = Column(Boolean, default=False)  # Блокировка пользователя
     
     def __repr__(self):
         return f"<User(id={self.id}, email={self.email}, type={self.user_type})>"

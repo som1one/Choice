@@ -6,6 +6,7 @@ import 'auth_service.dart';
 import 'remote_inquiry_service.dart';
 import 'remote_client_service.dart';
 import 'remote_ordering_service.dart';
+import 'remote_company_service.dart';
 import '../constants/categories.dart';
 
 class InquiryService {
@@ -14,6 +15,7 @@ class InquiryService {
   static final RemoteInquiryService _remoteInquiry = RemoteInquiryService();
   static final RemoteClientService _remoteClient = RemoteClientService();
   static final RemoteOrderingService _remoteOrdering = RemoteOrderingService();
+  static final RemoteCompanyService _remoteCompany = RemoteCompanyService();
 
   // Сохранить запрос
   static Future<void> saveInquiry(InquiryModel inquiry) async {
@@ -139,9 +141,23 @@ class InquiryService {
   static Future<List<InquiryModel>> getAllInquiries() async {
     final userType = await AuthService.getUserType();
     
-    // Для компаний получаем заявки с сервера
+    // Для компаний получаем заявки с сервера через новый endpoint
     if (ApiConfig.isConfigured && userType == UserType.company) {
-      final orderRequests = await _remoteClient.getOrderRequests();
+      // Получаем категории компании для фильтрации
+      final companyProfile = await _remoteCompany.getCompanyProfile();
+      List<int>? companyCategories;
+      if (companyProfile != null) {
+        final categories = companyProfile['categories_id'] ?? companyProfile['categoriesId'];
+        if (categories is List) {
+          companyCategories = categories.map((e) => (e as num).toInt()).toList();
+        }
+      }
+      
+      // Используем новый endpoint компании с фильтрацией по категориям и радиусу
+      final orderRequests = await _remoteCompany.getOrderRequests(
+        categoriesId: companyCategories,
+      );
+      
       if (orderRequests != null && orderRequests.isNotEmpty) {
         return orderRequests.map((request) {
           final id = (request['id'] ?? request['orderRequestId'])?.toString() ?? '';

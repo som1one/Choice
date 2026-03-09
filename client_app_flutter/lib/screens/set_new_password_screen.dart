@@ -26,9 +26,13 @@ class _SetNewPasswordScreenState extends State<SetNewPasswordScreen> {
   }
 
   bool get _isValid {
-    return _passwordController.text.isNotEmpty &&
+    return _passwordController.text.length >= 8 &&
         _confirmPasswordController.text.isNotEmpty &&
         _passwordController.text == _confirmPasswordController.text;
+  }
+  
+  bool get _isPasswordWeak {
+    return _passwordController.text.isNotEmpty && _passwordController.text.length < 8;
   }
 
   Future<void> _savePassword() async {
@@ -99,7 +103,8 @@ class _SetNewPasswordScreenState extends State<SetNewPasswordScreen> {
               enabled: !_isLoading,
               obscureText: _obscurePassword,
               decoration: InputDecoration(
-                hintText: 'Введите пароль',
+                hintText: 'Минимум 8 символов',
+                errorText: _isPasswordWeak ? 'Пароль должен содержать минимум 8 символов' : null,
                 suffixIcon: IconButton(
                   icon: Icon(
                     _obscurePassword ? Icons.visibility : Icons.visibility_off,

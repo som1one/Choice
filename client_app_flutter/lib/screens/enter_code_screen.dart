@@ -38,10 +38,27 @@ class _EnterCodeScreenState extends State<EnterCodeScreen> {
     });
 
     try {
-      // TODO: Реализовать проверку кода через AuthService
-      // Пока просто возвращаем успех
-      if (widget.onLoginSuccess != null) {
-        widget.onLoginSuccess!(false, false);
+      // Реальная проверка кода через API
+      final result = await AuthService.verifyCode(
+        phone: widget.phoneNumber,
+        code: _codeController.text.trim(),
+      );
+
+      if (!mounted) return;
+
+      if (result != null && result['success'] == true) {
+        // Успешная верификация
+        if (widget.onLoginSuccess != null) {
+          widget.onLoginSuccess!(
+            result['isCompany'] == true,
+            result['needsFillData'] == true,
+          );
+        }
+      } else {
+        // Ошибка верификации
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Неверный код подтверждения')),
+        );
       }
     } catch (e) {
       if (mounted) {

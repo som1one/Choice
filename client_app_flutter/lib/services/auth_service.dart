@@ -562,6 +562,19 @@ class AuthService {
     return prefs.getString(_authTokenKey);
   }
 
+  /// Получить ID текущего пользователя из JWT токена
+  static Future<String?> getCurrentUserId() async {
+    final token = await getAuthToken();
+    if (token == null || token.isEmpty) return null;
+    
+    final payload = _decodeJwtPayload(token);
+    if (payload == null) return null;
+    
+    // ID может быть в поле 'id' или 'user_id'
+    final id = payload['id'] ?? payload['user_id'];
+    return id?.toString();
+  }
+
   // Выход из системы (очистить все данные)
   static Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
@@ -587,6 +600,63 @@ class AuthService {
       return await _remoteAuth.verifyPasswordReset(email, code);
     }
     return null;
+  }
+
+  /// Отправка кода на телефон
+  static Future<bool> loginByPhone(String phone) async {
+    if (ApiConfig.isConfigured) {
+      return await _remoteAuth.loginByPhone(phone);
+    }
+    return false;
+  }
+
+  /// Верификация кода и вход по телефону
+  /// Возвращает информацию о пользователе: (success, isCompany, needsFillData)
+  static Future<Map<String, dynamic>?> verifyCode({
+    required String phone,
+    required String code,
+  }) async {
+    if (!ApiConfig.isConfigured) {
+      return {'success': false, 'isCompany': false, 'needsFillData': false};
+    }
+
+    final result = await _remoteAuth.verifyCode(phone: phone, code: code);
+    
+    if (result == null || !result.success || result.token == null) {
+      return {'success': false, 'isCompany': false, 'needsFillData': false};
+    }
+
+    // Сохраняем токен
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_authTokenKey, result.token!);
+    await AuthTokenStore.setToken(result.token!);
+
+    // Определяем тип пользователя из токена
+    final payload = _decodeJwtPayload(result.token!);
+    UserType? userType = UserType.client;
+    bool isCompany = false;
+    bool needsFillData = false;
+
+    if (payload != null) {
+      final userTypeStr = payload['user_type']?.toString();
+      if (userTypeStr == 'Company') {
+        userType = UserType.company;
+        isCompany = true;
+        // Проверяем, нужно ли заполнить данные компании
+        final isDataFilled = payload['is_data_filled'] ?? false;
+        needsFillData = !isDataFilled;
+      } else if (userTypeStr == 'Admin') {
+        userType = UserType.admin;
+      }
+    }
+
+    await setLoggedIn(true, userType: userType);
+
+    return {
+      'success': true,
+      'isCompany': isCompany,
+      'needsFillData': needsFillData,
+    };
   }
 
   /// Установка нового пароля после сброса

@@ -5,6 +5,7 @@ import 'dart:convert';
 import '../services/auth_service.dart';
 import '../services/remote_company_service.dart';
 import '../services/api_config.dart';
+import '../services/remote_file_service.dart';
 import 'company_login_screen.dart';
 import 'welcome_screen.dart';
 import 'chats_screen.dart';
@@ -256,6 +257,19 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   Future<void> _pickLogo() async {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    
+    // Загружаем изображение на сервер
+    if (ApiConfig.isConfigured) {
+      final fileService = RemoteFileService();
+      final filename = await fileService.uploadFile(image.path);
+      
+      if (filename != null) {
+        // Обновляем иконку через API
+        final companyService = RemoteCompanyService();
+        await companyService.changeIconUri(filename);
+      }
+    }
+    
     setState(() {
       _logoPath = image.path;
     });

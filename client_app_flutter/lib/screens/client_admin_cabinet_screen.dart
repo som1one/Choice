@@ -14,6 +14,7 @@ import 'dart:convert';
 import 'chats_screen.dart';
 import '../services/remote_client_service.dart';
 import '../services/api_config.dart';
+import '../services/remote_file_service.dart';
 
 class ClientAdminCabinetScreen extends StatefulWidget {
   const ClientAdminCabinetScreen({super.key});
@@ -212,6 +213,19 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   Future<void> _pickAvatar() async {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
+    
+    // Загружаем изображение на сервер
+    if (ApiConfig.isConfigured) {
+      final fileService = RemoteFileService();
+      final filename = await fileService.uploadFile(image.path);
+      
+      if (filename != null) {
+        // Обновляем иконку через API
+        final clientService = RemoteClientService();
+        await clientService.changeIconUri(filename);
+      }
+    }
+    
     setState(() {
       _avatarPath = image.path;
     });

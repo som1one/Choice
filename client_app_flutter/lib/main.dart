@@ -1,20 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'screens/welcome_screen.dart';
 import 'screens/login_screen_new.dart';
 import 'navigation/client_tab_navigator.dart';
 import 'navigation/company_tab_navigator.dart';
 import 'services/auth_service.dart';
+import 'services/push_notification_service.dart';
+import 'services/api_client.dart';
 
-void main() {
+// Обработчик фоновых сообщений (должен быть top-level функцией)
+@pragma('vm:entry-point')
+Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  try {
+    // Проверяем, не инициализирован ли уже Firebase
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+    print('Background message received: ${message.messageId}');
+  } catch (e) {
+    print('Firebase background handler error: $e');
+  }
+}
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Инициализация Firebase (только для мобильных платформ, не для веб)
+  if (!kIsWeb) {
+    try {
+      // Проверяем, не инициализирован ли уже Firebase
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      // Регистрация обработчика фоновых сообщений
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+      // Инициализация push-уведомлений
+      await PushNotificationService.initialize();
+    } catch (e) {
+      print('Firebase initialization error: $e');
+      // Продолжаем работу приложения даже если Firebase не инициализирован
+    }
+  } else {
+    print('Firebase skipped on web platform');
+  }
+  
   runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
+  
+  // Глобальный navigator key для навигации и показа ошибок
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
   @override
   Widget build(BuildContext context) {
+    // Устанавливаем navigator key для ApiClient
+    ApiClient.setNavigatorKey(navigatorKey);
+    
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'ВЫБОР',
       theme: ThemeData(
         primarySwatch: Colors.blue,

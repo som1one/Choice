@@ -28,6 +28,8 @@ class Company(Base):
     prepayment_available = Column(Boolean, default=False)
     is_data_filled = Column(Boolean, default=False)
     card_color = Column(String, default="#2196F3")  # Цвет карточки компании (hex)
+    is_blocked = Column(Boolean, default=False)  # Блокировка компании
+    is_on_map = Column(Boolean, default=True)  # Отображение компании на карте
     
     def __repr__(self):
         return f"<Company(id={self.id}, guid={self.guid}, title={self.title})>"

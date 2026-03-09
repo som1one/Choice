@@ -108,4 +108,19 @@ class RemoteOrderingService {
     );
     return json;
   }
+
+  /// Проверить возможность оставить отзыв
+  /// Возвращает true, если есть завершенный заказ и отзыв еще не оставлен
+  Future<bool> canAddReview({
+    required String clientId,
+    required String companyId,
+  }) async {
+    final json = await ApiClient.putJson(
+      '/api/order/addReview?client_id=$clientId&company_id=$companyId',
+      <String, dynamic>{},
+      baseUrl: ApiConfig.orderingBaseUrl,
+    );
+    if (json == null) return false;
+    return json['success'] == true;
+  }
 }

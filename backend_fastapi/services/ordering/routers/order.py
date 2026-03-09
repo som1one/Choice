@@ -49,7 +49,50 @@ async def create_order(
     
     order = await repo.add(order)
     
-    # TODO: Отправить событие OrderCreatedEvent в RabbitMQ
+    # Отправка push-уведомления клиенту о новом ответе компании
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from common.push_notification_service import send_push_notification
+        from services.authentication.models import User
+        
+        client = db.query(User).filter(User.id == request.receiver_id).first()
+        if client and client.device_token:
+            # Получаем название компании
+            from services.company_service.models import Company
+            company = db.query(Company).filter(Company.guid == company_id).first()
+            company_name = company.title if company else "Компания"
+            
+            send_push_notification(
+                device_token=client.device_token,
+                title="Новый ответ на заявку",
+                body=f"{company_name} ответил(а) на вашу заявку",
+                data={
+                    "type": "order_created",
+                    "order_id": str(order.id),
+                    "order_request_id": str(request.order_request_id),
+                    "company_id": str(company_id)
+                }
+            )
+    except Exception as e:
+        print(f"Error sending push notification: {e}")
+    
+    # Отправка события OrderCreatedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("OrderCreatedEvent", {
+            "order_id": order.id,
+            "order_request_id": order.order_request_id,
+            "client_id": str(order.client_id),
+            "company_id": str(order.company_id),
+            "price": str(order.price) if order.price else None,
+            "deadline": str(order.deadline) if order.deadline else None,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish OrderCreatedEvent: {e}")
     
     return order
 
@@ -121,7 +164,69 @@ async def enroll(
             detail="Failed to enroll"
         )
     
-    # TODO: Отправить событие UserEnrolledEvent в RabbitMQ
+    # Отправка события через WebSocket
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from services.chat.websocket import send_order_event_to_user
+        
+        order_data = {
+            "order_id": order.id,
+            "order_request_id": order.order_request_id,
+            "client_id": order.client_id,
+            "company_id": order.company_id,
+            "enrollment_date": order.enrollment_date.isoformat() if order.enrollment_date else None,
+            "is_date_confirmed": order.is_date_confirmed,
+            "is_enrolled": True,
+            "status": order.status
+        }
+        
+        await send_order_event_to_user(order.client_id, "enrolled", order_data)
+        await send_order_event_to_user(order.company_id, "enrolled", order_data)
+    except Exception as e:
+        print(f"Error sending WebSocket event: {e}")
+    
+    # Отправка push-уведомления компании о записи клиента
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from common.push_notification_service import send_push_notification
+        from services.authentication.models import User
+        
+        company = db.query(User).filter(User.id == order.company_id).first()
+        if company and company.device_token:
+            # Получаем имя клиента
+            client = db.query(User).filter(User.id == order.client_id).first()
+            client_name = client.user_name if client else "Клиент"
+            
+            send_push_notification(
+                device_token=company.device_token,
+                title="Клиент записался",
+                body=f"{client_name} записался на услугу",
+                data={
+                    "type": "order_enrolled",
+                    "order_id": str(order.id),
+                    "client_id": str(order.client_id)
+                }
+            )
+    except Exception as e:
+        print(f"Error sending push notification: {e}")
+    
+    # Отправка события UserEnrolledEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserEnrolledEvent", {
+            "order_id": order.id,
+            "client_id": str(order.client_id),
+            "company_id": str(order.company_id),
+            "enrollment_date": str(order.enrollment_date) if order.enrollment_date else None,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserEnrolledEvent: {e}")
     
     return order
 
@@ -151,7 +256,42 @@ async def confirm_enrollment_date(
             detail="Failed to confirm date"
         )
     
-    # TODO: Отправить событие OrderEnrollmentDateConfirmedEvent в RabbitMQ
+    # Отправка события через WebSocket
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from services.chat.websocket import send_order_event_to_user
+        
+        order_data = {
+            "order_id": order.id,
+            "order_request_id": order.order_request_id,
+            "client_id": order.client_id,
+            "company_id": order.company_id,
+            "enrollment_date": order.enrollment_date.isoformat() if order.enrollment_date else None,
+            "is_date_confirmed": True,
+            "is_enrolled": True,
+            "status": order.status
+        }
+        
+        await send_order_event_to_user(order.client_id, "confirmed", order_data)
+        await send_order_event_to_user(order.company_id, "confirmed", order_data)
+    except Exception as e:
+        print(f"Error sending WebSocket event: {e}")
+    
+    # Отправка события OrderEnrollmentDateConfirmedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("OrderEnrollmentDateConfirmedEvent", {
+            "order_id": order.id,
+            "client_id": str(order.client_id),
+            "company_id": str(order.company_id),
+            "enrollment_date": str(order.enrollment_date) if order.enrollment_date else None,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish OrderEnrollmentDateConfirmedEvent: {e}")
     
     return order
 
@@ -183,7 +323,43 @@ async def change_enrollment_date(
             detail="Failed to change date"
         )
     
-    # TODO: Отправить событие OrderEnrollmentDateChangedEvent в RabbitMQ
+    # Отправка события через WebSocket
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from services.chat.websocket import send_order_event_to_user
+        
+        # Отправляем событие клиенту и компании
+        order_data = {
+            "order_id": order.id,
+            "order_request_id": order.order_request_id,
+            "client_id": order.client_id,
+            "company_id": order.company_id,
+            "enrollment_date": order.enrollment_date.isoformat() if order.enrollment_date else None,
+            "is_date_confirmed": order.is_date_confirmed,
+            "is_enrolled": order.is_enrolled,
+            "status": order.status
+        }
+        
+        await send_order_event_to_user(order.client_id, "enrollmentDateChanged", order_data)
+        await send_order_event_to_user(order.company_id, "enrollmentDateChanged", order_data)
+    except Exception as e:
+        print(f"Error sending WebSocket event: {e}")
+    
+    # Отправка события OrderEnrollmentDateChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("OrderEnrollmentDateChangedEvent", {
+            "order_id": order.id,
+            "client_id": str(order.client_id),
+            "company_id": str(order.company_id),
+            "enrollment_date": str(order.enrollment_date) if order.enrollment_date else None,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish OrderEnrollmentDateChangedEvent: {e}")
     
     return order
 
@@ -212,7 +388,45 @@ async def finish_order(
             detail="Failed to finish order"
         )
     
-    # TODO: Отправить событие OrderStatusChangedEvent в RabbitMQ
+    # Отправка события через WebSocket
+    try:
+        import sys
+        from pathlib import Path
+        sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+        from services.chat.websocket import send_order_event_to_user
+        
+        order_data = {
+            "order_id": order.id,
+            "order_request_id": order.order_request_id,
+            "client_id": order.client_id,
+            "company_id": order.company_id,
+            "enrollment_date": order.enrollment_date.isoformat() if order.enrollment_date else None,
+            "is_date_confirmed": order.is_date_confirmed,
+            "is_enrolled": order.is_enrolled,
+            "status": OrderStatus.FINISHED.value
+        }
+        
+        await send_order_event_to_user(order.client_id, "statusChanged", order_data)
+        await send_order_event_to_user(order.company_id, "statusChanged", order_data)
+    except Exception as e:
+        print(f"Error sending WebSocket event: {e}")
+    
+    # Отправка события OrderStatusChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        # Получаем старый статус из базы (если нужно)
+        old_status = None  # Можно добавить логику для получения старого статуса
+        publish_event_sync("OrderStatusChangedEvent", {
+            "order_id": order.id,
+            "client_id": str(order.client_id),
+            "company_id": str(order.company_id),
+            "status": order.status,
+            "old_status": old_status,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish OrderStatusChangedEvent: {e}")
     
     return order
 

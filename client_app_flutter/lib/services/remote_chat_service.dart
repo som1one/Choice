@@ -1,5 +1,6 @@
 import 'api_client.dart';
 import 'api_config.dart';
+import 'remote_file_service.dart';
 
 class RemoteChatService {
   /// Получить сообщения с конкретным пользователем
@@ -73,10 +74,26 @@ class RemoteChatService {
   }
 
   /// Отправить изображение
+  /// 
+  /// [imagePath] - путь к локальному файлу изображения
+  /// [receiverId] - ID получателя
+  /// 
+  /// Сначала загружает изображение на сервер, затем отправляет сообщение с URI
   Future<Map<String, dynamic>?> sendImage({
-    required String imageUri,
+    required String imagePath,
     required String receiverId,
   }) async {
+    // Сначала загружаем изображение на сервер
+    final fileService = RemoteFileService();
+    final filename = await fileService.uploadFile(imagePath);
+    
+    if (filename == null) {
+      return null; // Ошибка загрузки файла
+    }
+    
+    // Формируем URI для отправки в сообщении
+    final imageUri = RemoteFileService.getFileUrl(filename);
+    
     final body = <String, dynamic>{
       'receiver_id': receiverId,
       'uri': imageUri,

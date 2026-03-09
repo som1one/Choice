@@ -14,6 +14,8 @@ import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
 import '../services/remote_client_service.dart';
 import '../services/auth_service.dart';
+import '../services/remote_file_service.dart';
+import '../services/api_config.dart';
 
 class ServiceQueryScreen extends StatefulWidget {
   final String category;
@@ -34,6 +36,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
+  bool _isLoading = false;
   String? _attachmentPath;
   final ImagePicker _imagePicker = ImagePicker();
   String _clientName = 'Клиент';
@@ -428,6 +431,35 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                                       GestureDetector(
                                         onTap: () async {
                                           if (_questionController.text.isNotEmpty) {
+                                            // Загружаем файл на сервер, если он есть
+                                            String? attachmentUrl = _attachmentPath;
+                                            
+                                            if (_attachmentPath != null && ApiConfig.isConfigured) {
+                                              setState(() {
+                                                _isLoading = true;
+                                              });
+                                              
+                                              try {
+                                                final fileService = RemoteFileService();
+                                                final filename = await fileService.uploadFile(_attachmentPath!);
+                                                if (filename != null) {
+                                                  attachmentUrl = RemoteFileService.getFileUrl(filename);
+                                                } else {
+                                                  // Если загрузка не удалась, используем локальный путь
+                                                  attachmentUrl = _attachmentPath;
+                                                }
+                                              } catch (e) {
+                                                // Если ошибка загрузки, используем локальный путь
+                                                attachmentUrl = _attachmentPath;
+                                              } finally {
+                                                if (mounted) {
+                                                  setState(() {
+                                                    _isLoading = false;
+                                                  });
+                                                }
+                                              }
+                                            }
+                                            
                                             // Сохранить запрос
                                             final inquiry = InquiryModel(
                                               id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -439,16 +471,18 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                                               wantsTime: _knowTime,
                                               wantsSpecialist: _knowSpecialist,
                                               wantsAppointmentTime: _knowAppointment,
-                                              attachmentUrl: _attachmentPath,
+                                              attachmentUrl: attachmentUrl,
                                             );
                                             await InquiryService.saveInquiry(inquiry);
                                             
-                                            Navigator.push(
-                                              context,
-                                              MaterialPageRoute(
-                                                builder: (context) => ClientViewInquiryScreen(),
-                                              ),
-                                            );
+                                            if (mounted) {
+                                              Navigator.push(
+                                                context,
+                                                MaterialPageRoute(
+                                                  builder: (context) => ClientViewInquiryScreen(),
+                                                ),
+                                              );
+                                            }
                                           }
                                         },
                                         child: Container(

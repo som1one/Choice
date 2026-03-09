@@ -1,5 +1,5 @@
 """Роутеры для Company Service"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Query
 from sqlalchemy.orm import Session
 from common.database import get_db
 from common.dependencies import get_current_user, require_admin, require_client
@@ -11,6 +11,9 @@ from ..schemas import (
 )
 from ..repositories import CompanyRepository
 from common.address_service import geocode, get_distance
+from services.client_service.models import OrderRequest, Client
+from services.client_service.schemas import OrderRequestResponse
+from math import radians, cos, sin, asin, sqrt
 import uuid
 
 router = APIRouter(prefix="/api/company", tags=["company"])
@@ -118,10 +121,10 @@ async def get_company(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение компании текущего пользователя"""
-    user_id = current_user["id"]
+    user_email = current_user["email"]
     
     repository = CompanyRepository(db)
-    company = await repository.get(user_id)
+    company = await repository.get_by_email(user_email)
     
     if not company:
         raise HTTPException(
@@ -243,12 +246,12 @@ async def change_data(
     if not request.is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": ["All fields should not be empty"]}
+            detail=str({"error": ["All fields should not be empty"]})
         )
     
-    user_id = current_user["id"]
+    user_email = current_user["email"]
     repository = CompanyRepository(db)
-    company = await repository.get(user_id)
+    company = await repository.get_by_email(user_email)
     
     if not company:
         raise HTTPException(
@@ -281,7 +284,22 @@ async def change_data(
             detail="Failed to update company"
         )
     
-    # TODO: Отправить событие UserDataChangedEvent в RabbitMQ
+    # Отправка события UserDataChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDataChangedEvent", {
+            "user_id": str(company.guid),
+            "user_type": "Company",
+            "email": company.email,
+            "title": company.title,
+            "phone_number": company.phone_number,
+            "city": company.city,
+            "street": company.street,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDataChangedEvent: {e}")
     
     return CompanyDetailsResponse(
         id=company.id,
@@ -313,7 +331,7 @@ async def change_data_admin(
     if not request.is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": ["All fields should not be empty"]}
+            detail=str({"error": ["All fields should not be empty"]})
         )
     
     repository = CompanyRepository(db)
@@ -350,7 +368,22 @@ async def change_data_admin(
             detail="Failed to update company"
         )
     
-    # TODO: Отправить событие UserDataChangedEvent в RabbitMQ
+    # Отправка события UserDataChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDataChangedEvent", {
+            "user_id": str(company.guid),
+            "user_type": "Company",
+            "email": company.email,
+            "title": company.title,
+            "phone_number": company.phone_number,
+            "city": company.city,
+            "street": company.street,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDataChangedEvent: {e}")
     
     return CompanyDetailsResponse(
         id=company.id,
@@ -379,9 +412,9 @@ async def change_icon_uri(
     current_user: dict = Depends(get_current_user)
 ):
     """Изменение иконки компании"""
-    user_id = current_user["id"]
+    user_email = current_user["email"]
     repository = CompanyRepository(db)
-    company = await repository.get(user_id)
+    company = await repository.get_by_email(user_email)
     
     if not company:
         raise HTTPException(
@@ -398,7 +431,18 @@ async def change_icon_uri(
             detail="Failed to update icon"
         )
     
-    # TODO: Отправить событие UserIconUriChangedEvent в RabbitMQ
+    # Отправка события UserIconUriChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserIconUriChangedEvent", {
+            "user_id": str(company.guid),
+            "user_type": "Company",
+            "icon_uri": company.icon_uri,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserIconUriChangedEvent: {e}")
     
     return CompanyDetailsResponse(
         id=company.id,
@@ -446,7 +490,18 @@ async def change_icon_uri_admin(
             detail="Failed to update icon"
         )
     
-    # TODO: Отправить событие UserIconUriChangedEvent в RabbitMQ
+    # Отправка события UserIconUriChangedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserIconUriChangedEvent", {
+            "user_id": str(company.guid),
+            "user_type": "Company",
+            "icon_uri": company.icon_uri,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserIconUriChangedEvent: {e}")
     
     return CompanyDetailsResponse(
         id=company.id,
@@ -484,7 +539,18 @@ async def delete_company(
             detail="Failed to delete company"
         )
     
-    # TODO: Отправить событие UserDeletedEvent в RabbitMQ
+    # Отправка события UserDeletedEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserDeletedEvent", {
+            "user_id": str(company.guid),
+            "user_type": "Company",
+            "email": company.email,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish UserDeletedEvent: {e}")
     
     return {"message": "Company deleted successfully"}
 
@@ -498,12 +564,12 @@ async def fill_company_data(
     if not request.is_valid:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": ["All fields should not be empty"]}
+            detail=str({"error": ["All fields should not be empty"]})
         )
     
-    user_id = current_user["id"]
+    user_email = current_user["email"]
     repository = CompanyRepository(db)
-    company = await repository.get(user_id)
+    company = await repository.get_by_email(user_email)
     
     if not company:
         raise HTTPException(
@@ -530,7 +596,20 @@ async def fill_company_data(
             detail="Failed to fill company data"
         )
     
-    # TODO: Отправить событие CompanyDataFilledEvent в RabbitMQ
+    # Отправка события CompanyDataFilledEvent в RabbitMQ
+    try:
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("CompanyDataFilledEvent", {
+            "company_id": str(company.guid),
+            "email": company.email,
+            "title": company.title,
+            "is_data_filled": company.is_data_filled,
+            "categories_id": company.categories_id,
+        })
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to publish CompanyDataFilledEvent: {e}")
     
     return CompanyDetailsResponse(
         id=company.id,
@@ -551,3 +630,217 @@ async def fill_company_data(
         description=company.description,
         card_color=getattr(company, 'card_color', '#2196F3') or '#2196F3'
     )
+
+@router.get("/getOrderRequests", response_model=list[OrderRequestResponse])
+async def get_order_requests(
+    request: Request,
+    categories_id: list[int] | None = Query(None, alias="categoriesId[]"),
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Получение заявок для компании
+    
+    Фильтрует заявки по:
+    - Категориям компании (или переданным categoriesId[])
+    - Радиусу поиска заявки (расстояние между компанией и клиентом)
+    
+    Поддерживает форматы:
+    - ?categoriesId[]=1&categoriesId[]=2 (массив категорий)
+    - ?categoriesId[0]=1&categoriesId[1]=2 (альтернативный формат)
+    """
+    # Проверка, что пользователь - компания
+    if current_user.get("user_type") != "Company":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only companies can get order requests"
+        )
+    
+    user_email = current_user["email"]
+    repository = CompanyRepository(db)
+    company = await repository.get_by_email(user_email)
+    
+    if not company:
+        return []
+    
+    # Обработка различных форматов categoriesId для обратной совместимости
+    if not categories_id:
+        query_params = request.query_params
+        # Проверяем формат categoriesId[0], categoriesId[1], etc.
+        categories_from_query = []
+        for key, value in query_params.items():
+            if key.startswith("categoriesId[") and key.endswith("]"):
+                try:
+                    categories_from_query.append(int(value))
+                except ValueError:
+                    pass
+        if categories_from_query:
+            categories_id = categories_from_query
+    
+    # Получаем категории компании
+    company_categories = company.categories_id or []
+    
+    # Если переданы категории в параметрах, используем их (для фильтрации)
+    if categories_id:
+        # Фильтруем только те категории, которые есть у компании
+        company_categories = [cat for cat in company_categories if cat in categories_id]
+    
+    # Если у компании нет категорий или после фильтрации список пуст, возвращаем пустой список
+    if not company_categories:
+        return []
+    
+    # Получаем все активные заявки
+    all_requests = db.query(OrderRequest).filter(
+        OrderRequest.status == 0  # Active
+    ).all()
+    
+    # Фильтруем по категориям компании
+    filtered_requests = [
+        req for req in all_requests
+        if req.category_id in company_categories
+    ]
+    
+    # Фильтруем по радиусу (расстояние между компанией и клиентом)
+    requests_in_radius = []
+    company_coords = company.coordinates
+    
+    if not company_coords:
+        return []
+    
+    def haversine_distance(lat1, lon1, lat2, lon2):
+        """Вычисление расстояния между двумя точками в метрах"""
+        R = 6371000  # Радиус Земли в метрах
+        lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = sin(dlat/2)**2 + cos(lat1) * cos(lat2) * sin(dlon/2)**2
+        c = 2 * asin(sqrt(a))
+        return R * c
+    
+    for req in filtered_requests:
+        # Получаем клиента заявки по ID (client_id - это Integer)
+        client = db.query(Client).filter(Client.id == req.client_id).first()
+        
+        if not client or not client.coordinates:
+            continue
+        
+        # Вычисляем расстояние между компанией и клиентом
+        try:
+            # Парсим координаты (формат: "lat,lng")
+            company_lat, company_lng = map(float, company_coords.split(','))
+            client_lat, client_lng = map(float, client.coordinates.split(','))
+            
+            distance = haversine_distance(company_lat, company_lng, client_lat, client_lng)
+            
+            # Проверяем, что расстояние меньше или равно радиусу поиска заявки
+            if distance <= req.search_radius:
+                requests_in_radius.append(req)
+        except (ValueError, AttributeError):
+            # Если не удалось вычислить расстояние, пропускаем заявку
+            continue
+    
+    return requests_in_radius
+
+@router.put("/blockCompany/{guid}")
+async def block_company(
+    guid: str,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Блокировка компании (только для админа)"""
+    repository = CompanyRepository(db)
+    company = await repository.get(guid)
+    
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    
+    company.is_blocked = True
+    db.commit()
+    
+    return {"message": "Company blocked successfully", "guid": guid, "is_blocked": True}
+
+@router.put("/unblockCompany/{guid}")
+async def unblock_company(
+    guid: str,
+    db: Session = Depends(get_db),
+    admin: dict = Depends(require_admin)
+):
+    """Разблокировка компании (только для админа)"""
+    repository = CompanyRepository(db)
+    company = await repository.get(guid)
+    
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    
+    company.is_blocked = False
+    db.commit()
+    
+    return {"message": "Company unblocked successfully", "guid": guid, "is_blocked": False}
+
+@router.delete("/deletePhoto")
+async def delete_photo(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Удаление фото/логотипа компании"""
+    user_email = current_user["email"]
+    repository = CompanyRepository(db)
+    company = await repository.get_by_email(user_email)
+    
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    
+    company.icon_uri = "defaulturi-png"
+    db.commit()
+    
+    return {"message": "Photo deleted successfully"}
+
+@router.put("/removeFromMap")
+async def remove_from_map(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Удаление компании с карты"""
+    user_email = current_user["email"]
+    repository = CompanyRepository(db)
+    company = await repository.get_by_email(user_email)
+    
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    
+    company.is_on_map = False
+    db.commit()
+    
+    return {"message": "Company removed from map successfully", "is_on_map": False}
+
+@router.put("/addToMap")
+async def add_to_map(
+    db: Session = Depends(get_db),
+    current_user: dict = Depends(get_current_user)
+):
+    """Добавление компании на карту"""
+    user_email = current_user["email"]
+    repository = CompanyRepository(db)
+    company = await repository.get_by_email(user_email)
+    
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+    
+    company.is_on_map = True
+    db.commit()
+    
+    return {"message": "Company added to map successfully", "is_on_map": True}

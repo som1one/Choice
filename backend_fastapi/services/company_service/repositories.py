@@ -17,6 +17,10 @@ class CompanyRepository:
         """Получение компании по GUID"""
         return self.db.query(Company).filter(Company.guid == guid).first()
     
+    async def get_by_email(self, email: str) -> Company | None:
+        """Получение компании по email"""
+        return self.db.query(Company).filter(Company.email == email).first()
+    
     async def get_all(self) -> list[Company]:
         """Получение всех компаний"""
         return self.db.query(Company).all()

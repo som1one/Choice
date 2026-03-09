@@ -3,6 +3,7 @@ import '../services/auth_service.dart';
 import 'company_login_screen.dart';
 import '../utils/auth_guard.dart';
 import '../navigation/company_tab_navigator.dart';
+import 'fill_company_data_screen.dart';
 
 class CompanyRegistrationScreen extends StatefulWidget {
   final String? email;
@@ -62,9 +63,9 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
       _emailValidationError = false;
     }
 
-    // Валидация пароля (минимум 6 знаков)
+    // Валидация пароля (минимум 8 знаков, как на бэкенде)
     if (_passwordController.text.isNotEmpty) {
-      _weakPasswordError = _passwordController.text.length < 6;
+      _weakPasswordError = _passwordController.text.length < 8;
     } else {
       _weakPasswordError = false;
     }
@@ -255,7 +256,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
+                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
                   ),
                   if (_weakPasswordError) ...[
                     const SizedBox(height: 5),
@@ -372,7 +373,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         );
       } else if (_weakPasswordError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+          const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
         );
       } else if (_passwordsNotMatchedError) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -395,16 +396,39 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         password: _passwordController.text,
         phoneNumber: _phoneController.text.trim().isNotEmpty 
             ? _phoneController.text.trim() 
-            : '0000000000',
+            : '',
         companyType: _companyType,
       );
-      // Автоматически переходим на главный экран компании после регистрации
+      // Автоматический вход после регистрации
       if (!mounted) return;
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
-        (route) => false,
+      final loginSuccess = await AuthService.loginCompany(
+        email: _emailController.text,
+        password: _passwordController.text,
       );
+      
+      if (!mounted) return;
+      
+      if (loginSuccess) {
+        // Переход на FillCompanyDataScreen для заполнения данных компании
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(
+            builder: (context) => FillCompanyDataScreen(
+              email: _emailController.text,
+              password: _passwordController.text,
+            ),
+          ),
+          (route) => false,
+        );
+      } else {
+        // Если вход не удался, переходим на экран входа
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => CompanyLoginScreen(),
+          ),
+        );
+      }
     } catch (e) {
       setState(() {
         _emailError = true;

@@ -70,9 +70,10 @@ async def upload_file(
         file_path.write_bytes(content)
         return {"message": "File uploaded successfully", "filename": fileName}
     except Exception as e:
+        error_msg = str(e) if e else "Unknown error"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload file: {str(e)}"
+            detail=error_msg
         )
 
 @router.post("/upload")
@@ -99,7 +100,9 @@ async def upload_file_auto(
         file_path.write_bytes(content)
         return {"message": "File uploaded successfully", "filename": file_name}
     except Exception as e:
+        # Убеждаемся, что error_message всегда строка и может быть сериализована
+        error_message = str(e) if e else "Unknown error occurred"
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to upload file: {str(e)}"
+            detail=error_message
         )

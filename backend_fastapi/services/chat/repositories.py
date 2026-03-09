@@ -45,6 +45,27 @@ class UserRepository:
         """Получение пользователя по GUID"""
         return self.db.query(ChatUser).filter(ChatUser.guid == guid).first()
     
+    async def get_or_create(self, user_id: str, user_name: str, email: str) -> ChatUser:
+        """Получение или создание пользователя чата по user_id (UUID)"""
+        # Преобразуем UUID в строку для использования как guid
+        guid = str(user_id) if user_id else None
+        if not guid:
+            raise ValueError("user_id cannot be None")
+        
+        user = await self.get(guid)
+        if not user:
+            # Создаем нового пользователя чата
+            user = ChatUser(
+                guid=guid,
+                name=user_name,
+                icon_uri=None,
+                status="Offline"
+            )
+            self.db.add(user)
+            self.db.commit()
+            self.db.refresh(user)
+        return user
+    
     async def update(self, user: ChatUser) -> bool:
         """Обновление пользователя"""
         try:

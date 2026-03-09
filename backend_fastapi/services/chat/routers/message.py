@@ -7,6 +7,11 @@ from ..models import Message, MessageType, ChatUser
 from ..schemas import MessageResponse, ChatResponse, SendMessageRequest, SendImageRequest
 from ..repositories import MessageRepository, UserRepository
 from ..websocket import send_message_to_user
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent.parent.parent))
+from common.push_notification_service import send_push_notification
+from services.authentication.models import User
 
 router = APIRouter(prefix="/api/message", tags=["message"])
 
@@ -35,7 +40,28 @@ async def send_message(
         "message": MessageResponse.model_validate(message).model_dump()
     })
     
-    # TODO: Отправить push-уведомление
+    # Отправка push-уведомления
+    try:
+        receiver = db.query(User).filter(User.id == request.receiver_id).first()
+        if receiver and receiver.device_token:
+            # Получаем имя отправителя
+            sender = db.query(User).filter(User.id == sender_id).first()
+            sender_name = sender.user_name if sender else "Пользователь"
+            
+            send_push_notification(
+                device_token=receiver.device_token,
+                title="Новое сообщение",
+                body=f"{sender_name}: {request.text[:50]}",
+                data={
+                    "type": "message",
+                    "sender_id": str(sender_id),
+                    "receiver_id": request.receiver_id,
+                    "message_id": str(message.id)
+                }
+            )
+    except Exception as e:
+        # Не прерываем выполнение, если push не отправился
+        print(f"Error sending push notification: {e}")
     
     return message
 
@@ -64,7 +90,28 @@ async def send_image(
         "message": MessageResponse.model_validate(message).model_dump()
     })
     
-    # TODO: Отправить push-уведомление
+    # Отправка push-уведомления
+    try:
+        receiver = db.query(User).filter(User.id == request.receiver_id).first()
+        if receiver and receiver.device_token:
+            # Получаем имя отправителя
+            sender = db.query(User).filter(User.id == sender_id).first()
+            sender_name = sender.user_name if sender else "Пользователь"
+            
+            send_push_notification(
+                device_token=receiver.device_token,
+                title="Новое изображение",
+                body=f"{sender_name} отправил(а) изображение",
+                data={
+                    "type": "image",
+                    "sender_id": str(sender_id),
+                    "receiver_id": request.receiver_id,
+                    "message_id": str(message.id)
+                }
+            )
+    except Exception as e:
+        # Не прерываем выполнение, если push не отправился
+        print(f"Error sending push notification: {e}")
     
     return message
 
@@ -115,10 +162,12 @@ async def get_chat(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение чата с пользователем"""
-    current_id = current_user["id"]
+    current_id = str(current_user["id"])
     
     user_repo = UserRepository(db)
-    user = await user_repo.get(user_id)
+    # user_id может быть UUID или guid, преобразуем в строку
+    user_guid = str(user_id)
+    user = await user_repo.get(user_guid)
     
     if not user:
         raise HTTPException(
@@ -127,7 +176,7 @@ async def get_chat(
         )
     
     message_repo = MessageRepository(db)
-    messages = await message_repo.get_all(current_id, user_id)
+    messages = await message_repo.get_all(current_id, user_guid)
     messages = sorted(messages, key=lambda m: m.creation_time)
     
     status_int = 1 if user.status == "Online" else 0
@@ -148,7 +197,7 @@ async def get_chats(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение всех чатов пользователя"""
-    user_id = current_user["id"]
+    user_id = str(current_user["id"])
     
     message_repo = MessageRepository(db)
     all_messages = await message_repo.get_all()
@@ -165,6 +214,7 @@ async def get_chats(
     chats = []
     
     for uid in user_ids:
+        # uid уже строка (guid)
         user = await user_repo.get(uid)
         if not user:
             continue

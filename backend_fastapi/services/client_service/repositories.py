@@ -11,6 +11,10 @@ class ClientRepository:
         """Получение клиента по GUID"""
         return self.db.query(Client).filter(Client.guid == guid).first()
     
+    async def get_by_email(self, email: str) -> Client | None:
+        """Получение клиента по email"""
+        return self.db.query(Client).filter(Client.email == email).first()
+    
     async def get_all(self) -> list[Client]:
         """Получение всех клиентов"""
         return self.db.query(Client).all()

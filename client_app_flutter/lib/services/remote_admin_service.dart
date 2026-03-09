@@ -5,8 +5,17 @@ class RemoteAdminService {
   Future<List<Map<String, dynamic>>?> getClients() async {
     final json = await ApiClient.getJson('/api/client/getClients', baseUrl: ApiConfig.clientBaseUrl);
     if (json == null) return null;
-    final data = json['data'];
-    if (data is List) return (data as List).map((e) => e as Map<String, dynamic>).toList();
+    // Бэкенд возвращает список напрямую, а не в поле 'data'
+    if (json is List) {
+      return (json as List).map((e) => e as Map<String, dynamic>).toList();
+    }
+    // Если это объект, проверяем поле 'data'
+    if (json is Map<String, dynamic>) {
+      final data = json['data'];
+      if (data is List) {
+        return (data as List).map((e) => e as Map<String, dynamic>).toList();
+      }
+    }
     return null;
   }
 

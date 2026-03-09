@@ -31,3 +31,6 @@ vonage==3.14.0
 
 # Утилиты
 python-dateutil==2.8.2
+
+# Firebase Admin SDK для push-уведомлений
+firebase-admin>=6.5.0

@@ -68,9 +68,9 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
       _emailValidationError = false;
     }
 
-    // Валидация пароля (минимум 6 знаков)
+    // Валидация пароля (минимум 8 знаков, как на бэкенде)
     if (_passwordController.text.isNotEmpty) {
-      _weakPasswordError = _passwordController.text.length < 6;
+      _weakPasswordError = _passwordController.text.length < 8;
     } else {
       _weakPasswordError = false;
     }
@@ -111,7 +111,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         );
       } else if (_weakPasswordError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароль должен содержать минимум 6 символов')),
+          const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
         );
       } else if (_passwordsNotMatchedError) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -314,7 +314,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 6 знаков', isPassword: true),
+                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
                   ),
                   if (_weakPasswordError) ...[
                     const SizedBox(height: 5),
