@@ -40,7 +40,11 @@ class ChatUser(Base):
     name = Column(String, nullable=False)
     icon_uri = Column(String, nullable=True)
     status = Column(String, default=UserStatus.OFFLINE.value)
-    device_tokens = Column(PG_ARRAY(String), default=[])
+    # Используем ARRAY для PostgreSQL и JSON для SQLite
+    if _is_postgresql:
+        device_tokens = Column(PG_ARRAY(String), default=[])
+    else:
+        device_tokens = Column(JSON, default=lambda: [])
     is_deleted = Column(Boolean, default=False)
     last_time_online = Column(DateTime, nullable=True)
     
