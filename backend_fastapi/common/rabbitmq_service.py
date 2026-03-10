@@ -273,7 +273,9 @@ async def consume_event(
         """Запуск consumer с автоматическим переподключением"""
         retry_delay = 5  # секунд
         retry_count = 0
+        disconnect_count = 0
         last_log_time = 0
+        last_disconnect_log_time = 0
         log_interval = 60  # Логировать ошибку не чаще раза в минуту
         
         while True:
@@ -293,10 +295,11 @@ async def consume_event(
                     await asyncio.sleep(retry_delay)
                     continue
                 
-                # Если подключились успешно, сбрасываем счетчик
+                # Если подключились успешно, сбрасываем счетчики
                 if retry_count > 0:
                     logger.info(f"Consumer for {event_type} connected successfully after {retry_count} attempts")
                     retry_count = 0
+                    disconnect_count = 0
                 
                 exchange = await get_exchange()
                 if exchange is None:
@@ -323,14 +326,24 @@ async def consume_event(
                 await queue.consume(message_handler)
                 
                 # Если дошли сюда, значит соединение разорвано
-                logger.warning(f"Consumer for {event_type} disconnected, reconnecting...")
+                disconnect_count += 1
+                current_time = asyncio.get_event_loop().time()
+                # Логируем отключение не чаще раза в минуту
+                if disconnect_count == 1 or (current_time - last_disconnect_log_time) >= log_interval:
+                    logger.warning(f"Consumer for {event_type} disconnected, reconnecting... (disconnect #{disconnect_count})")
+                    last_disconnect_log_time = current_time
                 await asyncio.sleep(retry_delay)
                 
             except asyncio.CancelledError:
                 logger.info(f"Consumer for {event_type} cancelled")
                 break
             except Exception as e:
-                logger.error(f"Error in consumer for {event_type}: {e}, reconnecting in {retry_delay}s...")
+                disconnect_count += 1
+                current_time = asyncio.get_event_loop().time()
+                # Логируем ошибки не чаще раза в минуту
+                if disconnect_count == 1 or (current_time - last_disconnect_log_time) >= log_interval:
+                    logger.error(f"Error in consumer for {event_type}: {e}, reconnecting in {retry_delay}s... (error #{disconnect_count})")
+                    last_disconnect_log_time = current_time
                 await asyncio.sleep(retry_delay)
     
     # Создаем задачу для consumer
