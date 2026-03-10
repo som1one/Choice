@@ -399,16 +399,13 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
             : '',
         companyType: _companyType,
       );
-      // Автоматический вход после регистрации
-      if (!mounted) return;
-      final loginSuccess = await AuthService.loginCompany(
-        email: _emailController.text,
-        password: _passwordController.text,
-      );
-      
+      // Регистрация уже возвращает токен, логин не нужен
       if (!mounted) return;
       
-      if (loginSuccess) {
+      // Проверяем, что пользователь залогинен (токен сохранен при регистрации)
+      final isLoggedIn = await AuthService.isLoggedIn();
+      
+      if (isLoggedIn) {
         // Переход на FillCompanyDataScreen для заполнения данных компании
         Navigator.pushAndRemoveUntil(
           context,
@@ -421,7 +418,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
           (route) => false,
         );
       } else {
-        // Если вход не удался, переходим на экран входа
+        // Если токен не сохранен, переходим на экран входа
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -475,18 +472,26 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
             ElevatedButton(
               onPressed: () async {
                 Navigator.pop(context); // Закрываем модальное окно
-                // Автоматический вход и переход на FillCompanyDataScreen
-                final loginSuccess = await AuthService.loginCompany(
-                  email: _emailController.text,
-                  password: _passwordController.text,
-                );
+                // Пользователь уже залогинен после регистрации
+                final isLoggedIn = await AuthService.isLoggedIn();
                 if (!mounted) return;
-                if (loginSuccess) {
-                  // TODO: Переход на FillCompanyDataScreen
+                if (isLoggedIn) {
+                  // Переход на FillCompanyDataScreen
                   Navigator.pushAndRemoveUntil(
                     context,
-                    MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
+                    MaterialPageRoute(
+                      builder: (context) => FillCompanyDataScreen(
+                        email: _emailController.text,
+                        password: _passwordController.text,
+                      ),
+                    ),
                     (route) => false,
+                  );
+                } else {
+                  // Если токен не сохранен, переходим на экран входа
+                  Navigator.pushReplacement(
+                    context,
+                    MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
                   );
                 }
               },

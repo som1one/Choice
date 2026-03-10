@@ -162,22 +162,34 @@ class _FillCompanyDataScreenState extends State<FillCompanyDataScreen> {
       });
 
       if (success && mounted) {
-        // Автоматически входим с сохраненными данными
-        final loginResult = await AuthService.loginUniversal(
-          email: widget.email,
-          password: widget.password,
-        );
-
-        if (loginResult != null && mounted) {
+        // Пользователь уже залогинен после регистрации, просто переходим
+        // Проверяем, что токен еще валиден
+        final isLoggedIn = await AuthService.isLoggedIn();
+        
+        if (isLoggedIn && mounted) {
           Navigator.pushAndRemoveUntil(
             context,
             MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
             (route) => false,
           );
         } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Данные сохранены, но не удалось войти. Войдите вручную.')),
+          // Если токен истек, пробуем залогиниться заново
+          final loginResult = await AuthService.loginUniversal(
+            email: widget.email,
+            password: widget.password,
           );
+          
+          if (loginResult != null && mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+              (route) => false,
+            );
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Данные сохранены, но сессия истекла. Войдите заново.')),
+            );
+          }
         }
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
