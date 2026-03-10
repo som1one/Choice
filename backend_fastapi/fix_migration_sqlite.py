@@ -32,35 +32,41 @@ def fix_migration_for_sqlite(file_path: Path):
     # 2. Удаляем или комментируем ALTER COLUMN для SQLite (SQLite не поддерживает это)
     lines = content.split('\n')
     new_lines = []
+    i = 0
     
-    for i, line in enumerate(lines):
+    while i < len(lines):
+        line = lines[i]
+        
         # Пропускаем строки с ALTER COLUMN TYPE
         if 'ALTER COLUMN' in line and 'TYPE' in line:
-            # Комментируем вместо удаления
             indent = len(line) - len(line.lstrip())
-            new_lines.append(' ' * indent + f"# SQLite doesn't support ALTER COLUMN TYPE: {line.strip()}")
+            new_lines.append(' ' * indent + f"# SQLite doesn't support ALTER COLUMN TYPE")
+            i += 1
             continue
+        
         # Пропускаем op.alter_column с type_ параметром
         if 'op.alter_column' in line:
-            # Проверяем, есть ли type_ в этой строке или следующих
-            check_line = line
+            # Проверяем, есть ли type_ в этой строке или следующих (до закрывающей скобки)
+            check_lines = [line]
             j = i + 1
-            while j < len(lines) and (lines[j].strip().startswith('type_') or lines[j].strip().startswith(',') or lines[j].strip() == ''):
-                check_line += ' ' + lines[j].strip()
-                j += 1
-                if j >= len(lines) or lines[j].strip().startswith(')'):
-                    break
+            open_parens = line.count('(') - line.count(')')
             
-            if 'type_' in check_line or 'TYPE' in check_line:
+            while j < len(lines) and open_parens > 0:
+                check_lines.append(lines[j])
+                open_parens += lines[j].count('(') - lines[j].count(')')
+                j += 1
+            
+            full_block = ' '.join(check_lines)
+            
+            if 'type_' in full_block or 'TYPE' in full_block:
                 indent = len(line) - len(line.lstrip())
                 new_lines.append(' ' * indent + f"# SQLite: op.alter_column with type_ not supported")
-                # Пропускаем следующие строки до закрывающей скобки
-                while i < len(lines) - 1:
-                    i += 1
-                    if ')' in lines[i] and lines[i].strip().count(')') >= lines[i].strip().count('('):
-                        break
+                # Пропускаем все строки этого блока
+                i = j
                 continue
+        
         new_lines.append(line)
+        i += 1
     
     content = '\n'.join(new_lines)
     
