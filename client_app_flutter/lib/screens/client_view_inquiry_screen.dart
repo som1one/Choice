@@ -63,10 +63,11 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
       // Пытаемся преобразовать ID в int для запроса к API
       final orderRequestId = int.tryParse(inquiry.id);
       
-      List<Map<String, dynamic>>? relevantOrders;
+      List<Map<String, dynamic>> relevantOrders = [];
       if (orderRequestId != null) {
         // Получаем заказы напрямую по order_request_id через API
-        relevantOrders = await orderingService.getOrders(orderRequestId: orderRequestId);
+        final orders = await orderingService.getOrders(orderRequestId: orderRequestId);
+        relevantOrders = orders ?? [];
       } else {
         // Если ID не может быть преобразован в int, пытаемся найти заказы по строковому ID
         // Получаем все заказы и фильтруем по строковому ID заявки
@@ -80,7 +81,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         }
       }
       
-      if (relevantOrders != null && relevantOrders.isNotEmpty) {
+      if (relevantOrders.isNotEmpty) {
 
         // Загружаем информацию о компаниях для каждого заказа
         final companyService = RemoteCompanyService();

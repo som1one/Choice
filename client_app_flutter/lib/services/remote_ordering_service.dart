@@ -72,21 +72,42 @@ class RemoteOrderingService {
         ? '/api/order/get?order_request_id=$orderRequestId'
         : '/api/order/get';
     
-    final json = await ApiClient.getJson(
-      url,
-      baseUrl: ApiConfig.orderingBaseUrl,
-    );
-    if (json == null) return null;
-    if (json is List) {
-      return (json as List).map((e) => e as Map<String, dynamic>).toList();
-    }
-    if (json is Map<String, dynamic>) {
-      final orders = json['orders'] ?? json['data'];
-      if (orders is List) {
-        return (orders as List).map((e) => e as Map<String, dynamic>).toList();
+    try {
+      final json = await ApiClient.getJson(
+        url,
+        baseUrl: ApiConfig.orderingBaseUrl,
+      );
+      
+      // Если запрос вернул null (ошибка сети или сервера), возвращаем пустой список
+      // чтобы не ломать UI, но логируем ошибку
+      if (json == null) {
+        print('Warning: getOrders returned null for orderRequestId=$orderRequestId');
+        return [];
       }
+      
+      // Если ответ - это список, возвращаем его
+      if (json is List) {
+        return (json as List).map((e) => e as Map<String, dynamic>).toList();
+      }
+      
+      // Если ответ - это объект, пытаемся извлечь список заказов
+      if (json is Map<String, dynamic>) {
+        final orders = json['orders'] ?? json['data'] ?? json['result'];
+        if (orders is List) {
+          return (orders as List).map((e) => e as Map<String, dynamic>).toList();
+        }
+        // Если в объекте нет списка, но есть другие данные, логируем
+        print('Warning: getOrders response is object but no orders list found: $json');
+      }
+      
+      // Если формат неожиданный, возвращаем пустой список
+      print('Warning: Unexpected response format in getOrders: ${json.runtimeType}');
+      return [];
+    } catch (e) {
+      // Обрабатываем любые исключения и возвращаем пустой список
+      print('Error in getOrders: $e');
+      return [];
     }
-    return [];
   }
 
   /// Завершить заказ
