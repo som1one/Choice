@@ -61,8 +61,8 @@ def test_user_creation():
     try:
         from common.database import SessionLocal
         from services.authentication.models import User, UserType
+        from common.security import get_password_hash
         import uuid
-        from services.authentication.utils import get_password_hash
         
         db = SessionLocal()
         
@@ -117,7 +117,7 @@ def test_full_registration_flow():
         from common.database import SessionLocal
         from services.authentication.models import User, UserType
         from services.company_service.models import Company
-        from services.authentication.utils import get_password_hash
+        from common.security import get_password_hash
         import uuid
         import asyncio
         from common.address_service import geocode
