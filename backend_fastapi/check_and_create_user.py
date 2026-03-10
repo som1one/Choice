@@ -19,8 +19,10 @@ def check_database():
     """Проверка подключения к БД"""
     print("=== Проверка базы данных ===")
     try:
+        from sqlalchemy import text
         with engine.connect() as conn:
-            result = conn.execute("SELECT 1")
+            result = conn.execute(text("SELECT 1"))
+            result.fetchone()
             print("✓ Подключение к БД работает")
     except Exception as e:
         print(f"✗ Ошибка подключения к БД: {e}")

@@ -8,22 +8,30 @@ cd /opt/Choice/backend_fastapi || exit 1
 echo "=== Перезапуск Authentication Service ==="
 echo ""
 
-# 1. Найти и убить ВСЕ процессы uvicorn на порту 8001
-echo "1. Поиск процессов на порту 8001..."
-PIDS=$(lsof -ti:8001 2>/dev/null || fuser 8001/tcp 2>/dev/null | awk '{print $1}' || ps aux | grep "uvicorn.*8001" | grep -v grep | awk '{print $2}')
+# 1. Найти и убить ВСЕ процессы uvicorn на порту 8001 и authentication
+echo "1. Поиск всех процессов authentication service..."
+# Найти по порту
+PIDS_PORT=$(lsof -ti:8001 2>/dev/null)
+# Найти по имени процесса
+PIDS_UVICORN=$(ps aux | grep -E "uvicorn.*8001|uvicorn.*authentication" | grep -v grep | awk '{print $2}')
+# Объединить и убрать дубликаты
+ALL_PIDS=$(echo "$PIDS_PORT $PIDS_UVICORN" | tr ' ' '\n' | sort -u | tr '\n' ' ')
 
-if [ -n "$PIDS" ]; then
-    echo "   Найдены процессы: $PIDS"
+if [ -n "$ALL_PIDS" ]; then
+    echo "   Найдены процессы: $ALL_PIDS"
     echo "   Остановка процессов..."
-    for PID in $PIDS; do
+    for PID in $ALL_PIDS; do
         if kill -0 "$PID" 2>/dev/null; then
             echo "   Убиваем процесс $PID"
             kill -9 "$PID" 2>/dev/null || true
         fi
     done
-    sleep 2
+    sleep 3
+    # Принудительно освободить порт
+    fuser -k 8001/tcp 2>/dev/null || true
+    sleep 1
 else
-    echo "   Процессы на порту 8001 не найдены"
+    echo "   Процессы не найдены"
 fi
 
 # 2. Проверить, что порт освободился

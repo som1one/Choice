@@ -1,0 +1,86 @@
+================================================================================
+КОМАНДЫ ДЛЯ ОБНОВЛЕНИЯ КОДА НА СЕРВЕРЕ (GIT PULL)
+================================================================================
+
+# 1. ПЕРЕХОД В ДИРЕКТОРИЮ ПРОЕКТА
+cd /opt/Choice/backend_fastapi
+
+# 2. ПРОВЕРКА ТЕКУЩЕГО СТАТУСА
+git status
+
+# 3. ОСТАНОВКА СЕРВИСА (если запущен)
+lsof -ti:8001 | xargs kill -9 2>/dev/null || pkill -f "uvicorn.*8001"
+sleep 2
+
+# 4. ОБНОВЛЕНИЕ КОДА ИЗ РЕПОЗИТОРИЯ
+git pull origin main
+
+# 5. ПРОВЕРКА ИЗМЕНЕНИЙ
+git log --oneline -5
+
+# 6. УСТАНОВКА ПРАВ НА ВЫПОЛНЕНИЕ ДЛЯ СКРИПТОВ
+chmod +x restart_auth_service.sh
+chmod +x check_auth_service.sh
+chmod +x quick_restart.sh
+chmod +x server_commands.sh
+
+# 7. ЗАПУСК СЕРВИСА
+source .venv/bin/activate
+PYTHONPATH="$(pwd)" nohup .venv/bin/python -m uvicorn services.authentication.main:app --host 0.0.0.0 --port 8001 --reload > logs/authentication.log 2>&1 &
+
+# 8. ПРОВЕРКА
+sleep 3
+ps aux | grep "uvicorn.*8001" | grep -v grep
+curl http://localhost:8001/health
+
+================================================================================
+БЫСТРОЕ ОБНОВЛЕНИЕ (одной командой)
+================================================================================
+
+cd /opt/Choice/backend_fastapi && \
+lsof -ti:8001 | xargs kill -9 2>/dev/null || pkill -f "uvicorn.*8001" && \
+sleep 2 && \
+git pull origin main && \
+chmod +x *.sh && \
+source .venv/bin/activate && \
+PYTHONPATH="$(pwd)" nohup .venv/bin/python -m uvicorn services.authentication.main:app --host 0.0.0.0 --port 8001 --reload > logs/authentication.log 2>&1 & \
+sleep 3 && \
+curl http://localhost:8001/health
+
+================================================================================
+ЕСЛИ ЕСТЬ ЛОКАЛЬНЫЕ ИЗМЕНЕНИЯ (конфликты)
+================================================================================
+
+# Вариант 1: Сохранить локальные изменения
+cd /opt/Choice/backend_fastapi
+git stash
+git pull origin main
+git stash pop
+
+# Вариант 2: Отменить локальные изменения (ОСТОРОЖНО!)
+cd /opt/Choice/backend_fastapi
+git reset --hard HEAD
+git pull origin main
+
+# Вариант 3: Посмотреть различия перед обновлением
+cd /opt/Choice/backend_fastapi
+git fetch origin
+git diff main origin/main
+
+================================================================================
+ПРОВЕРКА ПОСЛЕ ОБНОВЛЕНИЯ
+================================================================================
+
+# Проверить, что новые файлы на месте
+ls -la restart_auth_service.sh
+ls -la check_auth_service.sh
+ls -la server_commands.sh
+
+# Проверить версию
+git log --oneline -1
+
+# Использовать новые скрипты
+./restart_auth_service.sh
+./check_auth_service.sh
+
+================================================================================

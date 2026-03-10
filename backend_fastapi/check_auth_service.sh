@@ -95,8 +95,10 @@ import sys
 sys.path.insert(0, '/opt/Choice/backend_fastapi')
 try:
     from common.database import engine
+    from sqlalchemy import text
     with engine.connect() as conn:
-        result = conn.execute("SELECT 1")
+        result = conn.execute(text("SELECT 1"))
+        result.fetchone()
         print("OK")
 except Exception as e:
     print(f"ERROR: {e}")
