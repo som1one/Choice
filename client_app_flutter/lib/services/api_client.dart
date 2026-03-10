@@ -1,4 +1,6 @@
 import 'dart:convert';
+import 'dart:async';
+import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:flutter/material.dart';
 import 'api_config.dart';
@@ -9,7 +11,7 @@ import '../services/auth_service.dart';
 import '../screens/welcome_screen.dart';
 
 class ApiClient {
-  static const Duration _timeout = Duration(seconds: 10);
+  static const Duration _timeout = Duration(seconds: 30);
   
   // Глобальный navigator key для показа ошибок
   static GlobalKey<NavigatorState>? navigatorKey;
@@ -82,9 +84,25 @@ class ApiClient {
       if (response.body.isEmpty) return <String, dynamic>{};
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    } on TimeoutException catch (e) {
+      print('API Timeout Error (GET): ${e.message} for $baseUrl$path');
+      final exception = ApiException.timeout();
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
     } on http.ClientException catch (e) {
       print('API Network Error (GET): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
+    } on SocketException catch (e) {
+      print('API Socket Error (GET): ${e.message} for $baseUrl$path');
+      final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
       }
@@ -161,9 +179,25 @@ class ApiClient {
       if (response.body.isEmpty) return <String, dynamic>{};
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    } on TimeoutException catch (e) {
+      print('API Timeout Error (POST): ${e.message} for $baseUrl$path');
+      final exception = ApiException.timeout();
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
     } on http.ClientException catch (e) {
       print('API Network Error (POST): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
+    } on SocketException catch (e) {
+      print('API Socket Error (POST): ${e.message} for $baseUrl$path');
+      final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
       }
@@ -182,7 +216,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
-      print('API Unknown Error (POST): $e for $baseUrl$path');
+      print('API Unknown Error (POST): $e (${e.runtimeType}) for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -245,14 +279,32 @@ class ApiClient {
       if (response.body.isEmpty) return <String, dynamic>{};
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    } on TimeoutException catch (e) {
+      print('API Timeout Error (DELETE): ${e.message} for $baseUrl$path');
+      final exception = ApiException.timeout();
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
     } on http.ClientException catch (e) {
+      print('API Network Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
       if (throwOnError) {
         throw exception;
       }
       _showError(exception);
       return null;
+    } on SocketException catch (e) {
+      print('API Socket Error (DELETE): ${e.message} for $baseUrl$path');
+      final exception = ApiException.networkError('Socket error: ${e.message}');
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
     } on FormatException catch (e) {
+      print('API Format Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException(
         statusCode: 0,
         message: 'Invalid response format',
@@ -264,6 +316,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
+      print('API Unknown Error (DELETE): $e (${e.runtimeType}) for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -312,9 +365,25 @@ class ApiClient {
       if (response.body.isEmpty) return <String, dynamic>{};
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
+    } on TimeoutException catch (e) {
+      print('API Timeout Error (PUT): ${e.message} for $baseUrl$path');
+      final exception = ApiException.timeout();
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
     } on http.ClientException catch (e) {
       print('API Network Error (PUT): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
+      if (throwOnError) {
+        throw exception;
+      }
+      _showError(exception);
+      return null;
+    } on SocketException catch (e) {
+      print('API Socket Error (PUT): ${e.message} for $baseUrl$path');
+      final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
       }
