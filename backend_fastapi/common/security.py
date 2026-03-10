@@ -30,17 +30,36 @@ def _get_pwd_context():
     """Ленивая инициализация CryptContext"""
     global _pwd_context
     if _pwd_context is None:
-        try:
-            # Пробуем инициализировать bcrypt
-            _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        except (ValueError, Exception) as e:
-            # Если bcrypt не работает (например, из-за detect_wrap_bug),
-            # используем plaintext (только для разработки!)
+        # Пробуем разные схемы по порядку
+        schemes_to_try = [
+            ("pbkdf2_sha256", "pbkdf2_sha256"),  # Более надежная альтернатива
+            ("bcrypt", "bcrypt"),  # Пробуем bcrypt
+            ("plaintext", "plaintext")  # Fallback для разработки
+        ]
+        
+        for scheme_name, scheme in schemes_to_try:
+            try:
+                _pwd_context = CryptContext(schemes=[scheme], deprecated="auto")
+                # Тестируем, что схема работает
+                test_hash = _pwd_context.hash("test")
+                _pwd_context.verify("test", test_hash)
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.info(f"Password hashing scheme initialized: {scheme_name}")
+                break
+            except (ValueError, AttributeError, Exception) as e:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"Failed to initialize {scheme_name}: {e}")
+                continue
+        
+        # Если ничего не сработало, используем plaintext
+        if _pwd_context is None:
             import warnings
             import logging
             logger = logging.getLogger(__name__)
-            logger.warning(f"Bcrypt initialization failed: {e}. Using plaintext (INSECURE - for development only!)")
-            warnings.warn(f"Bcrypt failed, using plaintext: {e}")
+            logger.error("All password hashing schemes failed! Using plaintext (INSECURE - for development only!)")
+            warnings.warn("All password hashing schemes failed! Using plaintext (INSECURE!)")
             _pwd_context = CryptContext(schemes=["plaintext"], deprecated="auto")
     return _pwd_context
 
