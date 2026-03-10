@@ -272,6 +272,9 @@ async def consume_event(
     async def start_consumer():
         """Запуск consumer с автоматическим переподключением"""
         retry_delay = 5  # секунд
+        retry_count = 0
+        last_log_time = 0
+        log_interval = 60  # Логировать ошибку не чаще раза в минуту
         
         while True:
             try:
@@ -281,13 +284,27 @@ async def consume_event(
                 
                 channel = await get_channel()
                 if channel is None:
-                    logger.error(f"Failed to get channel for consumer: {event_type}")
+                    retry_count += 1
+                    current_time = asyncio.get_event_loop().time()
+                    # Логируем только раз в минуту или при первой попытке
+                    if retry_count == 1 or (current_time - last_log_time) >= log_interval:
+                        logger.warning(f"Failed to get channel for consumer: {event_type} (attempt {retry_count}, RabbitMQ may be unavailable)")
+                        last_log_time = current_time
                     await asyncio.sleep(retry_delay)
                     continue
                 
+                # Если подключились успешно, сбрасываем счетчик
+                if retry_count > 0:
+                    logger.info(f"Consumer for {event_type} connected successfully after {retry_count} attempts")
+                    retry_count = 0
+                
                 exchange = await get_exchange()
                 if exchange is None:
-                    logger.error(f"Failed to get exchange for consumer: {event_type}")
+                    retry_count += 1
+                    current_time = asyncio.get_event_loop().time()
+                    if retry_count == 1 or (current_time - last_log_time) >= log_interval:
+                        logger.warning(f"Failed to get exchange for consumer: {event_type} (attempt {retry_count})")
+                        last_log_time = current_time
                     await asyncio.sleep(retry_delay)
                     continue
                 
