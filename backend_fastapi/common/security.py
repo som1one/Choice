@@ -21,8 +21,9 @@ class JWTSettings(BaseSettings):
 
 jwt_settings = JWTSettings()
 
-# Инициализация bcrypt
-# Используем отложенную инициализацию, чтобы избежать проблем с detect_wrap_bug
+# Инициализация bcrypt с отложенной загрузкой
+# Проблема: bcrypt может падать при инициализации из-за detect_wrap_bug
+# Решение: используем ленивую инициализацию
 _pwd_context = None
 
 def _get_pwd_context():
@@ -30,20 +31,21 @@ def _get_pwd_context():
     global _pwd_context
     if _pwd_context is None:
         try:
+            # Пробуем инициализировать bcrypt
             _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-        except Exception as e:
-            # Если bcrypt не работает, используем plaintext (только для разработки!)
+        except (ValueError, Exception) as e:
+            # Если bcrypt не работает (например, из-за detect_wrap_bug),
+            # используем plaintext (только для разработки!)
             import warnings
-            warnings.warn(f"Bcrypt initialization failed: {e}. Using plaintext (INSECURE!)")
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Bcrypt initialization failed: {e}. Using plaintext (INSECURE - for development only!)")
+            warnings.warn(f"Bcrypt failed, using plaintext: {e}")
             _pwd_context = CryptContext(schemes=["plaintext"], deprecated="auto")
     return _pwd_context
 
-# Инициализируем сразу для обратной совместимости
-try:
-    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-except Exception:
-    # Если не удалось, используем ленивую инициализацию
-    pwd_context = None
+# Для обратной совместимости создаем переменную, но инициализируем лениво
+pwd_context = None  # Будет инициализирован при первом использовании
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверка пароля"""
