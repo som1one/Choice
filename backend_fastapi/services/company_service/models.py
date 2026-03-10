@@ -1,9 +1,13 @@
 """Модели базы данных для Company Service"""
-from sqlalchemy import Column, Integer, String, Boolean, Float, ARRAY
+from sqlalchemy import Column, Integer, String, Boolean, Float, ARRAY, JSON
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
 from sqlalchemy.ext.declarative import declarative_base
-from common.database import Base
+from common.database import Base, engine
 import uuid
+import json
+
+# Определяем тип БД для выбора правильного типа колонок
+_is_postgresql = engine.url.drivername.startswith("postgresql")
 
 class Company(Base):
     """Модель компании"""
@@ -22,9 +26,17 @@ class Company(Base):
     description = Column(String, default="")
     average_grade = Column(Float, default=0.0)
     reviews_count = Column(Integer, default=0)
-    social_medias = Column(PG_ARRAY(String), default=[])
-    photo_uris = Column(PG_ARRAY(String), default=[])
-    categories_id = Column(PG_ARRAY(Integer), default=[])
+    
+    # Используем ARRAY для PostgreSQL и JSON для SQLite
+    if _is_postgresql:
+        social_medias = Column(PG_ARRAY(String), default=[])
+        photo_uris = Column(PG_ARRAY(String), default=[])
+        categories_id = Column(PG_ARRAY(Integer), default=[])
+    else:
+        # Для SQLite используем JSON
+        social_medias = Column(JSON, default=lambda: [])
+        photo_uris = Column(JSON, default=lambda: [])
+        categories_id = Column(JSON, default=lambda: [])
     prepayment_available = Column(Boolean, default=False)
     is_data_filled = Column(Boolean, default=False)
     card_color = Column(String, default="#2196F3")  # Цвет карточки компании (hex)
