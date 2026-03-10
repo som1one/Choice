@@ -243,8 +243,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             try:
                 from services.company_service.database import init_db
                 init_db()
-            except Exception:
-                pass  # Таблицы могут быть уже созданы
+            except Exception as init_error:
+                import logging
+                logger = logging.getLogger(__name__)
+                logger.warning(f"init_db() warning (tables may already exist): {init_error}")
             
             from services.company_service.models import Company
             
@@ -254,6 +256,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             company_city = city if city and city.strip() else "-"
             company_street = street if street and street.strip() else "-"
             
+            # Убеждаемся, что coordinates - это строка
+            if not isinstance(coordinates, str):
+                coordinates = str(coordinates) if coordinates else "55.7558,37.6173"
+            
             company = Company(
                 guid=user_guid,
                 title=user_name,
@@ -261,7 +267,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
                 email=user_email,
                 city=company_city,
                 street=company_street,
-                coordinates=coordinates
+                coordinates=coordinates,
+                social_medias=[],  # Явно указываем пустой список для JSON
+                photo_uris=[],     # Явно указываем пустой список для JSON
+                categories_id=[]   # Явно указываем пустой список для JSON
             )
             db.add(company)
             db.commit()
