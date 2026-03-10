@@ -30,34 +30,36 @@ def fix_migration_for_sqlite(file_path: Path):
         content = '\n'.join(lines)
     
     # 2. Удаляем или комментируем ALTER COLUMN для SQLite (SQLite не поддерживает это)
-    # Ищем паттерны типа: ALTER TABLE "Users" ALTER COLUMN id TYPE UUID
-    sqlite_unsupported_patterns = [
-        r"op\.alter_column\([^)]+TYPE[^)]+\)",
-        r'sa\.Column\([^)]+TYPE[^)]+\)',
-    ]
-    
-    # Заменяем ALTER COLUMN TYPE на комментарий для SQLite
-    def replace_alter_column(match):
-        return f"# SQLite doesn't support ALTER COLUMN TYPE: {match.group(0)}"
-    
-    for pattern in sqlite_unsupported_patterns:
-        content = re.sub(pattern, replace_alter_column, content, flags=re.MULTILINE)
-    
-    # 3. Удаляем строки с ALTER COLUMN TYPE в upgrade/downgrade функциях
     lines = content.split('\n')
     new_lines = []
-    skip_next = False
     
     for i, line in enumerate(lines):
         # Пропускаем строки с ALTER COLUMN TYPE
         if 'ALTER COLUMN' in line and 'TYPE' in line:
             # Комментируем вместо удаления
-            new_lines.append(f"        # SQLite: {line.strip()}")
+            indent = len(line) - len(line.lstrip())
+            new_lines.append(' ' * indent + f"# SQLite doesn't support ALTER COLUMN TYPE: {line.strip()}")
             continue
         # Пропускаем op.alter_column с type_ параметром
-        if 'op.alter_column' in line and ('type_' in line or 'TYPE' in line):
-            new_lines.append(f"        # SQLite: {line.strip()}")
-            continue
+        if 'op.alter_column' in line:
+            # Проверяем, есть ли type_ в этой строке или следующих
+            check_line = line
+            j = i + 1
+            while j < len(lines) and (lines[j].strip().startswith('type_') or lines[j].strip().startswith(',') or lines[j].strip() == ''):
+                check_line += ' ' + lines[j].strip()
+                j += 1
+                if j >= len(lines) or lines[j].strip().startswith(')'):
+                    break
+            
+            if 'type_' in check_line or 'TYPE' in check_line:
+                indent = len(line) - len(line.lstrip())
+                new_lines.append(' ' * indent + f"# SQLite: op.alter_column with type_ not supported")
+                # Пропускаем следующие строки до закрывающей скобки
+                while i < len(lines) - 1:
+                    i += 1
+                    if ')' in lines[i] and lines[i].strip().count(')') >= lines[i].strip().count('('):
+                        break
+                continue
         new_lines.append(line)
     
     content = '\n'.join(new_lines)
