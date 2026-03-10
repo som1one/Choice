@@ -28,6 +28,16 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def get_password_hash(password: str) -> str:
     """Хеширование пароля"""
+    # Убеждаемся, что пароль - это строка
+    if not isinstance(password, str):
+        password = str(password)
+    
+    # Bcrypt имеет ограничение в 72 байта, обрезаем если необходимо
+    # Но обычно пароли короче, так что это защита на случай проблем
+    password_bytes = password.encode('utf-8')
+    if len(password_bytes) > 72:
+        password = password_bytes[:72].decode('utf-8', errors='ignore')
+    
     return pwd_context.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
