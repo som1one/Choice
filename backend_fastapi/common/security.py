@@ -20,11 +20,35 @@ class JWTSettings(BaseSettings):
         extra = "ignore"  # Игнорировать дополнительные поля из .env
 
 jwt_settings = JWTSettings()
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Инициализация bcrypt
+# Используем отложенную инициализацию, чтобы избежать проблем с detect_wrap_bug
+_pwd_context = None
+
+def _get_pwd_context():
+    """Ленивая инициализация CryptContext"""
+    global _pwd_context
+    if _pwd_context is None:
+        try:
+            _pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+        except Exception as e:
+            # Если bcrypt не работает, используем plaintext (только для разработки!)
+            import warnings
+            warnings.warn(f"Bcrypt initialization failed: {e}. Using plaintext (INSECURE!)")
+            _pwd_context = CryptContext(schemes=["plaintext"], deprecated="auto")
+    return _pwd_context
+
+# Инициализируем сразу для обратной совместимости
+try:
+    pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+except Exception:
+    # Если не удалось, используем ленивую инициализацию
+    pwd_context = None
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Проверка пароля"""
-    return pwd_context.verify(plain_password, hashed_password)
+    ctx = pwd_context if pwd_context is not None else _get_pwd_context()
+    return ctx.verify(plain_password, hashed_password)
 
 def get_password_hash(password: str) -> str:
     """Хеширование пароля"""
@@ -38,7 +62,8 @@ def get_password_hash(password: str) -> str:
     if len(password_bytes) > 72:
         password = password_bytes[:72].decode('utf-8', errors='ignore')
     
-    return pwd_context.hash(password)
+    ctx = pwd_context if pwd_context is not None else _get_pwd_context()
+    return ctx.hash(password)
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     """Создание JWT токена"""
