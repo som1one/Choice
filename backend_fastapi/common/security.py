@@ -32,25 +32,33 @@ def _get_pwd_context():
     if _pwd_context is None:
         # Пробуем разные схемы по порядку
         schemes_to_try = [
-            ("pbkdf2_sha256", "pbkdf2_sha256"),  # Более надежная альтернатива
+            ("pbkdf2_sha256", "pbkdf2_sha256"),  # Более надежная альтернатива, не требует bcrypt
             ("bcrypt", "bcrypt"),  # Пробуем bcrypt
             ("plaintext", "plaintext")  # Fallback для разработки
         ]
         
         for scheme_name, scheme in schemes_to_try:
             try:
-                _pwd_context = CryptContext(schemes=[scheme], deprecated="auto")
-                # Тестируем, что схема работает
-                test_hash = _pwd_context.hash("test")
-                _pwd_context.verify("test", test_hash)
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"Password hashing scheme initialized: {scheme_name}")
-                break
+                ctx = CryptContext(schemes=[scheme], deprecated="auto")
+                # Тестируем, что схема работает (это может вызвать ошибку для bcrypt)
+                try:
+                    test_hash = ctx.hash("test")
+                    ctx.verify("test", test_hash)
+                    _pwd_context = ctx
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.info(f"Password hashing scheme initialized: {scheme_name}")
+                    break
+                except (ValueError, AttributeError) as test_error:
+                    # Ошибка при тестировании - схема не работает
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.warning(f"Scheme {scheme_name} failed test: {test_error}")
+                    continue
             except (ValueError, AttributeError, Exception) as e:
                 import logging
                 logger = logging.getLogger(__name__)
-                logger.warning(f"Failed to initialize {scheme_name}: {e}")
+                logger.warning(f"Failed to create {scheme_name} context: {e}")
                 continue
         
         # Если ничего не сработало, используем plaintext
