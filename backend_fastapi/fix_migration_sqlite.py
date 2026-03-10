@@ -72,8 +72,32 @@ def fix_migration_for_sqlite(file_path: Path):
     bind = op.get_bind()
     is_postgresql = bind.dialect.name == 'postgresql'
     is_sqlite = bind.dialect.name == 'sqlite'
+    
+    # Для SQLite проверяем существование таблиц перед созданием
+    from sqlalchemy import inspect
+    inspector = inspect(bind)
+    existing_tables = inspector.get_table_names()
 '''
         )
+    
+    # 5. Заменяем op.create_table на условное создание для SQLite
+    # Ищем паттерны: op.create_table('TableName', ...
+    def replace_create_table(match):
+        table_name = match.group(1)
+        rest = match.group(2)
+        return f'''    # Проверяем существование таблицы для SQLite
+    if is_sqlite and '{table_name}' in existing_tables:
+        # Таблица уже существует, пропускаем создание
+        pass
+    else:
+        op.create_table('{table_name}'{rest}'''
+    
+    # Заменяем op.create_table на условное создание
+    content = re.sub(
+        r"op\.create_table\(['\"]([^'\"]+)['\"]([^)]+)\)",
+        replace_create_table,
+        content
+    )
     
     if content != original_content:
         file_path.write_text(content)
