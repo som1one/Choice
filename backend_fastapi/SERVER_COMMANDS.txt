@@ -1,0 +1,124 @@
+================================================================================
+КОМАНДЫ ДЛЯ УПРАВЛЕНИЯ AUTHENTICATION SERVICE НА СЕРВЕРЕ
+================================================================================
+
+# 1. ПЕРЕХОД В ДИРЕКТОРИЮ
+cd /opt/Choice/backend_fastapi
+
+# 2. ОСТАНОВКА ВСЕХ ПРОЦЕССОВ НА ПОРТУ 8001
+lsof -ti:8001 | xargs kill -9 2>/dev/null || fuser -k 8001/tcp 2>/dev/null || pkill -f "uvicorn.*8001"
+sleep 2
+
+# 3. ПРОВЕРКА, ЧТО ПОРТ СВОБОДЕН
+lsof -ti:8001 || echo "Порт свободен"
+
+# 4. ЗАПУСК СЕРВИСА ИЗ .venv
+source .venv/bin/activate
+PYTHONPATH="$(pwd)" nohup .venv/bin/python -m uvicorn services.authentication.main:app --host 0.0.0.0 --port 8001 --reload > logs/authentication.log 2>&1 &
+
+# 5. ПОДОЖДАТЬ ЗАПУСКА
+sleep 3
+
+# 6. ПРОВЕРКА ПРОЦЕССОВ
+ps aux | grep "uvicorn.*8001" | grep -v grep
+
+# 7. ПРОВЕРКА HEALTH ENDPOINT
+curl http://localhost:8001/health
+
+# 8. ПРОВЕРКА SWAGGER UI
+curl -I http://localhost:8001/docs
+
+# 9. ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ В БД
+source .venv/bin/activate
+python3 check_and_create_user.py
+
+# 10. ТЕСТОВЫЙ ЗАПРОС НА LOGIN
+curl -X POST http://localhost:8001/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"email":"cp@gmail.com","password":"qwerty123"}'
+
+# 11. ПРОСМОТР ЛОГОВ (последние 50 строк)
+tail -50 logs/authentication.log
+
+# 12. ПРОСМОТР ЛОГОВ В РЕАЛЬНОМ ВРЕМЕНИ
+tail -f logs/authentication.log
+
+# 13. ПРОВЕРКА ПОРТОВ
+lsof -i:8001
+netstat -tulpn | grep 8001
+
+================================================================================
+БЫСТРЫЙ ПЕРЕЗАПУСК (одной командой)
+================================================================================
+
+cd /opt/Choice/backend_fastapi && \
+lsof -ti:8001 | xargs kill -9 2>/dev/null || pkill -f "uvicorn.*8001" && \
+sleep 2 && \
+source .venv/bin/activate && \
+PYTHONPATH="$(pwd)" nohup .venv/bin/python -m uvicorn services.authentication.main:app --host 0.0.0.0 --port 8001 --reload > logs/authentication.log 2>&1 & \
+sleep 3 && \
+ps aux | grep "uvicorn.*8001" | grep -v grep && \
+curl http://localhost:8001/health
+
+================================================================================
+ИСПОЛЬЗОВАНИЕ СКРИПТОВ
+================================================================================
+
+# Загрузить функции в текущую сессию
+source server_commands.sh
+
+# Или использовать как обычный скрипт
+chmod +x server_commands.sh
+./server_commands.sh restart
+./server_commands.sh status
+./server_commands.sh logs -f
+
+# Использование готовых скриптов
+chmod +x restart_auth_service.sh
+./restart_auth_service.sh
+
+chmod +x check_auth_service.sh
+./check_auth_service.sh
+
+================================================================================
+ДИАГНОСТИКА ПРОБЛЕМ
+================================================================================
+
+# Проверка всех процессов uvicorn
+ps aux | grep uvicorn
+
+# Проверка занятых портов
+lsof -i:8001
+
+# Проверка размера файла БД
+ls -lh choice.db
+
+# Проверка переменных окружения
+env | grep DATABASE
+env | grep ADMIN
+
+# Проверка Python окружения
+source .venv/bin/activate
+which python
+python --version
+pip list | grep uvicorn
+
+# Проверка импортов
+cd /opt/Choice/backend_fastapi
+source .venv/bin/activate
+PYTHONPATH="$(pwd)" python -c "from services.authentication.main import app; print('OK')"
+
+================================================================================
+ПОЛЕЗНЫЕ ССЫЛКИ
+================================================================================
+
+# Swagger UI
+http://77.95.203.148:8001/docs
+
+# Health check
+http://77.95.203.148:8001/health
+
+# Root endpoint
+http://77.95.203.148:8001/
+
+================================================================================
