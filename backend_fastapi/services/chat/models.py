@@ -1,9 +1,12 @@
 """Модели базы данных для Chat Service"""
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ARRAY
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ARRAY, JSON
 from sqlalchemy.dialects.postgresql import ARRAY as PG_ARRAY
-from common.database import Base
+from common.database import Base, engine
 from datetime import datetime
 import enum
+
+# Определяем тип БД для выбора правильного типа колонок
+_is_postgresql = engine.url.drivername.startswith("postgresql")
 
 class MessageType(enum.Enum):
     """Тип сообщения"""
@@ -41,10 +44,8 @@ class ChatUser(Base):
     icon_uri = Column(String, nullable=True)
     status = Column(String, default=UserStatus.OFFLINE.value)
     # Используем ARRAY для PostgreSQL и JSON для SQLite
-    if _is_postgresql:
-        device_tokens = Column(PG_ARRAY(String), default=[])
-    else:
-        device_tokens = Column(JSON, default=lambda: [])
+    device_tokens = (Column(PG_ARRAY(String), default=[]) if _is_postgresql 
+                     else Column(JSON, default=lambda: []))
     is_deleted = Column(Boolean, default=False)
     last_time_online = Column(DateTime, nullable=True)
     

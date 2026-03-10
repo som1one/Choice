@@ -29,10 +29,8 @@ class Order(Base):
     is_enrolled = Column(Boolean, default=False)
     is_date_confirmed = Column(Boolean, default=True)
     # Используем ARRAY для PostgreSQL и JSON для SQLite
-    if _is_postgresql:
-        reviews = Column(PG_ARRAY(String), default=[])
-    else:
-        reviews = Column(JSON, default=lambda: [])
+    reviews = (Column(PG_ARRAY(String), default=[]) if _is_postgresql 
+               else Column(JSON, default=lambda: []))
     status = Column(Integer, default=OrderStatus.ACTIVE.value)
     user_changed_enrollment_date_guid = Column(String, nullable=True)
     

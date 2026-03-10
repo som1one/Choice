@@ -16,10 +16,8 @@ class Review(Base):
     text = Column(String, nullable=True)
     grade = Column(Integer, nullable=False)  # 1-5
     # Используем ARRAY для PostgreSQL и JSON для SQLite
-    if _is_postgresql:
-        photo_uris = Column(PG_ARRAY(String), default=[])
-    else:
-        photo_uris = Column(JSON, default=lambda: [])
+    photo_uris = (Column(PG_ARRAY(String), default=[]) if _is_postgresql 
+                  else Column(JSON, default=lambda: []))
     
     def __repr__(self):
         return f"<Review(id={self.id}, sender={self.sender_id}, receiver={self.receiver_id}, grade={self.grade})>"
