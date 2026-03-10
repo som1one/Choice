@@ -17,15 +17,23 @@ class RemoteAuthService {
     String street = '-',
     String phoneNumber = '0000000000',
   }) async {
-    final json = await ApiClient.postJson('/api/auth/register', {
+    // Формируем тело запроса, отправляем phone_number только если он не пустой и не дефолтный
+    final requestBody = <String, dynamic>{
       'name': fullName,
       'email': email,
       'password': password,
       'street': street,
       'city': city,
-      'phone_number': phoneNumber,
       'type': 'Client',
-    }, baseUrl: ApiConfig.authBaseUrl);
+    };
+    
+    // Добавляем phone_number только если он не пустой и не дефолтный
+    final normalizedPhone = phoneNumber.trim();
+    if (normalizedPhone.isNotEmpty && normalizedPhone != '0000000000') {
+      requestBody['phone_number'] = normalizedPhone;
+    }
+    
+    final json = await ApiClient.postJson('/api/auth/register', requestBody, baseUrl: ApiConfig.authBaseUrl);
     if (json == null) return null;
     return RemoteAuthResult(
       success: (json['success'] as bool?) ?? true,
@@ -60,15 +68,23 @@ class RemoteAuthService {
     String city = '-',
     String phoneNumber = '0000000000',
   }) async {
-    final json = await ApiClient.postJson('/api/auth/register', {
+    // Формируем тело запроса, отправляем phone_number только если он не пустой и не дефолтный
+    final requestBody = <String, dynamic>{
       'name': companyName,
       'email': email,
       'password': password,
       'street': street,
       'city': city,
-      'phone_number': phoneNumber,
       'type': 'Company',
-    }, baseUrl: ApiConfig.authBaseUrl);
+    };
+    
+    // Добавляем phone_number только если он не пустой и не дефолтный
+    final normalizedPhone = phoneNumber.trim();
+    if (normalizedPhone.isNotEmpty && normalizedPhone != '0000000000') {
+      requestBody['phone_number'] = normalizedPhone;
+    }
+    
+    final json = await ApiClient.postJson('/api/auth/register', requestBody, baseUrl: ApiConfig.authBaseUrl);
     if (json == null) return null;
     return RemoteAuthResult(
       success: (json['success'] as bool?) ?? true,

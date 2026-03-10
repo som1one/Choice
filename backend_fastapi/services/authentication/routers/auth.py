@@ -160,8 +160,8 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             detail=str({"email": ["Email already in use"]})
         )
     
-    # Проверка уникальности телефона (только если указан)
-    if request.phone_number and request.phone_number.strip():
+    # Проверка уникальности телефона (только если указан и не дефолтный)
+    if request.phone_number and request.phone_number.strip() and request.phone_number != "0000000000":
         existing_user = db.query(User).filter(User.phone_number == request.phone_number).first()
         if existing_user:
             raise HTTPException(
