@@ -35,13 +35,22 @@ async def handle_user_created(event_data: dict):
         
         user_name = event_data.get("user_name", "")
         email = event_data.get("email", "")
-        city = event_data.get("city", "")
-        street = event_data.get("street", "")
-        phone_number = event_data.get("phone_number", "")
+        city = event_data.get("city") or ""
+        street = event_data.get("street") or ""
+        phone_number = event_data.get("phone_number") or ""
+        
+        # Используем дефолтные значения для обязательных полей
+        company_phone = phone_number if phone_number and phone_number.strip() else "0000000000"
+        company_city = city if city and city.strip() else "-"
+        company_street = street if street and street.strip() else "-"
         
         # Получаем координаты адреса
         from common.address_service import geocode
-        coordinates = await geocode(city, street)
+        coordinates = await geocode(company_city, company_street)
+        
+        # Убеждаемся, что coordinates - это непустая строка
+        if not coordinates or not coordinates.strip():
+            coordinates = "55.7558,37.6173"  # Дефолтные координаты Москвы
         
         db = SessionLocal()
         try:
@@ -56,9 +65,9 @@ async def handle_user_created(event_data: dict):
                 guid=str(user_id),
                 title=user_name,
                 email=email,
-                phone_number=phone_number,
-                city=city,
-                street=street,
+                phone_number=company_phone,
+                city=company_city,
+                street=company_street,
                 coordinates=coordinates,
                 icon_uri="defaulturi-png"
             )

@@ -143,9 +143,9 @@ async def verify_code(request: VerifyCodeRequest, db: Session = Depends(get_db))
     token = generate_token(user)
     return TokenResponse(access_token=token)
 
-@router.post("/register", response_model=UserResponse)
+@router.post("/register", response_model=TokenResponse)
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
-    """Регистрация нового пользователя"""
+    """Регистрация нового пользователя с автоматическим логином"""
     if request.type == UserType.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -206,6 +206,9 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         
         # Получаем координаты адреса
         coordinates = await geocode(city, street)
+        # Убеждаемся, что coordinates - это непустая строка
+        if not coordinates or not coordinates.strip():
+            coordinates = "55.7558,37.6173"  # Дефолтные координаты Москвы
         
         if request.type == UserType.CLIENT:
             # Создаем клиента
@@ -236,6 +239,13 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
             db.commit()
         elif request.type == UserType.COMPANY:
             # Создаем компанию
+            # Убеждаемся, что таблицы Company созданы
+            try:
+                from services.company_service.database import init_db
+                init_db()
+            except Exception:
+                pass  # Таблицы могут быть уже созданы
+            
             from services.company_service.models import Company
             
             # Используем дефолтное значение для phone_number, если он пустой
@@ -259,12 +269,17 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     except Exception as e:
         # Если не удалось создать Client/Company, логируем ошибку и откатываем транзакцию
         import logging
+        import traceback
         logger = logging.getLogger(__name__)
-        logger.error(f"Failed to create Client/Company for user {user.id}: {e}", exc_info=True)
+        error_trace = traceback.format_exc()
+        logger.error(f"Failed to create Client/Company for user {user.id}: {e}\n{error_trace}", exc_info=True)
         db.rollback()
         # Удаляем созданного пользователя, так как не удалось создать связанную сущность
-        db.delete(user)
-        db.commit()
+        try:
+            db.delete(user)
+            db.commit()
+        except Exception:
+            db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create company profile: {str(e)}"
@@ -286,22 +301,23 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     except Exception as e:
         logger.warning(f"Failed to publish UserCreatedEvent: {e}")
     
-    # Возвращаем UserResponse для правильной сериализации
+    # Автоматический логин после регистрации - генерируем токен
+    token = generate_token(user)
+    
+    # Отправка события UserAuthenticatedEvent в RabbitMQ (как при обычном логине)
     try:
-        return UserResponse.model_validate(user)
+        from common.rabbitmq_service import publish_event_sync
+        publish_event_sync("UserAuthenticatedEvent", {
+            "user_id": str(user.id),
+            "email": user.email,
+            "user_type": user.user_type.value,
+            "device_token": request.device_token if hasattr(request, 'device_token') else None
+        })
     except Exception as e:
-        # Если не удалось сериализовать, возвращаем базовые данные
-        logger.error(f"Failed to serialize UserResponse: {e}")
-        return UserResponse(
-            id=user.id,
-            email=user.email,
-            user_name=user.user_name,
-            phone_number=user.phone_number,
-            city=user.city,
-            street=user.street,
-            user_type=user.user_type,
-            icon_uri=user.icon_uri
-        )
+        logger.warning(f"Failed to publish UserAuthenticatedEvent: {e}")
+    
+    # Возвращаем токен для автоматического логина
+    return TokenResponse(access_token=token)
 
 @router.post("/resetPassword")
 async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
