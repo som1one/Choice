@@ -10,8 +10,10 @@ echo "=== Stopping all services ==="
 # Убиваем ВСЕ процессы uvicorn на нужных портах
 pkill -9 -f "uvicorn.*8001" 2>/dev/null || true
 pkill -9 -f "uvicorn.*8003" 2>/dev/null || true
+pkill -9 -f "uvicorn.*8005" 2>/dev/null || true
 lsof -ti:8001 | xargs kill -9 2>/dev/null || true
 lsof -ti:8003 | xargs kill -9 2>/dev/null || true
+lsof -ti:8005 | xargs kill -9 2>/dev/null || true
 
 # Ждем освобождения портов
 sleep 3
@@ -27,11 +29,17 @@ if lsof -i:8003 >/dev/null 2>&1; then
     lsof -i:8003
 fi
 
+if lsof -i:8005 >/dev/null 2>&1; then
+    echo "WARNING: Port 8005 still in use!"
+    lsof -i:8005
+fi
+
 echo "=== Initializing database ==="
 
 # Инициализация БД через init_db (игнорируем предупреждения)
 python -c "from services.authentication.database import init_db; init_db()" 2>&1 | grep -v "Warning" || true
 python -c "from services.company_service.database import init_db; init_db()" 2>&1 | grep -v "Warning" || true
+python -c "from services.ordering.database import init_db; init_db()" 2>&1 | grep -v "Warning" || true
 
 echo "=== Starting services ==="
 
@@ -52,6 +60,15 @@ echo "Starting Company Service on port 8003..."
 nohup python -m uvicorn services.company_service.main:app --host 0.0.0.0 --port 8003 > logs/company_service.log 2>&1 &
 COMPANY_PID=$!
 echo "Company Service PID: $COMPANY_PID"
+
+# Ждем немного перед запуском следующего сервиса
+sleep 2
+
+# Запуск Ordering Service
+echo "Starting Ordering Service on port 8005..."
+nohup python -m uvicorn services.ordering.main:app --host 0.0.0.0 --port 8005 > logs/ordering.log 2>&1 &
+ORDERING_PID=$!
+echo "Ordering Service PID: $ORDERING_PID"
 
 # Ждем запуска сервисов
 sleep 5
