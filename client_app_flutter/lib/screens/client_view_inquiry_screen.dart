@@ -527,61 +527,171 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
     required int price,
     required int deadline,
   }) {
-    return Container(
-      width: 120,
-      padding: const EdgeInsets.all(8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
+    return TweenAnimationBuilder<double>(
+      duration: const Duration(milliseconds: 400),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, value, child) {
+        return Transform.scale(
+          scale: 0.8 + (0.2 * value),
+          child: Opacity(opacity: value, child: child),
+        );
+      },
+      child: Container(
+        width: 140,
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              const Color(0xFF87CEEB).withValues(alpha: 0.05),
+            ],
           ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Рейтинг
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: List.generate(5, (index) {
-              return Icon(
-                index < rating.round() ? Icons.star : Icons.star_border,
-                color: Colors.amber,
-                size: 12,
-              );
-            }),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: const Color(0xFF87CEEB).withValues(alpha: 0.3),
+            width: 1.5,
           ),
-          const SizedBox(height: 4),
-          // Название компании
-          Text(
-            companyName,
-            style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFF87CEEB).withValues(alpha: 0.2),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+              spreadRadius: 0,
             ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.1),
+              blurRadius: 6,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Рейтинг с фоном
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: Colors.amber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      ...List.generate(5, (index) {
+                        return Icon(
+                          index < rating.round() ? Icons.star : Icons.star_border,
+                          color: Colors.amber[700],
+                          size: 10,
+                        );
+                      }),
+                      const SizedBox(width: 4),
+                      Text(
+                        rating.toStringAsFixed(1),
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.amber[900],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Название компании
+                Text(
+                  companyName,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                    letterSpacing: -0.3,
+                  ),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                // Разделитель
+                Container(
+                  height: 1,
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [
+                        Colors.transparent,
+                        Colors.grey[300]!,
+                        Colors.transparent,
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                // Цена и сроки
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.attach_money,
+                                size: 12,
+                                color: Colors.green[700],
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  price > 0 ? '$price ₽' : 'По договорённости',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.green[700],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 12,
+                                color: Colors.blue[700],
+                              ),
+                              const SizedBox(width: 4),
+                              Flexible(
+                                child: Text(
+                                  '$deadline ${_getDeadlineUnit(deadline)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.blue[700],
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 4),
-          // Иконка (автомобиль)
-          Icon(Icons.directions_car, size: 16, color: Colors.blue[300]),
-          const SizedBox(height: 4),
-          // Цена
-          Text(
-            'Цена $price',
-            style: const TextStyle(fontSize: 10),
-          ),
-          // Сроки
-          Text(
-            'Срок $deadline ${_getDeadlineUnit(deadline)}',
-            style: const TextStyle(fontSize: 10),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -595,44 +705,251 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   void _showCompanySelectionDialog() {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Выберите компанию'),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView.builder(
-            shrinkWrap: true,
-            itemCount: _companyResponses.length,
-            itemBuilder: (context, index) {
-              final response = _companyResponses[index];
-              final companyName = response.companyName;
-              final rating = response.rating;
-              final price = response.price;
-              final deadline = response.deadline;
-
-              return ListTile(
-                title: Text(companyName),
-                subtitle: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      barrierColor: Colors.black.withValues(alpha: 0.5),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(24),
+        ),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Заголовок
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  gradient: const LinearGradient(
+                    colors: [Color(0xFF2D81E0), Color(0xFF87CEEB)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
                   children: [
-                    Row(
-                      children: List.generate(5, (i) {
-                        return Icon(
-                          i < rating.round() ? Icons.star : Icons.star_border,
-                          color: Colors.amber,
-                          size: 16,
-                        );
-                      }),
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.business,
+                        color: Colors.white,
+                        size: 24,
+                      ),
                     ),
-                    Text('Цена: $price'),
-                    Text('Срок: $deadline ${_getDeadlineUnit(deadline)}'),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Выберите компанию',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
                   ],
                 ),
-                onTap: () {
-                  Navigator.pop(context);
-                  _selectCompany(response);
-                },
-              );
-            },
+              ),
+              // Список компаний
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  padding: const EdgeInsets.all(16),
+                  itemCount: _companyResponses.length,
+                  itemBuilder: (context, index) {
+                    final response = _companyResponses[index];
+                    final companyName = response.companyName;
+                    final rating = response.rating;
+                    final price = response.price;
+                    final deadline = response.deadline;
+
+                    return TweenAnimationBuilder<double>(
+                      duration: Duration(milliseconds: 300 + (index * 50)),
+                      tween: Tween(begin: 0.0, end: 1.0),
+                      builder: (context, value, child) {
+                        return Transform.translate(
+                          offset: Offset(0, 20 * (1 - value)),
+                          child: Opacity(opacity: value, child: child),
+                        );
+                      },
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: const Color(0xFF87CEEB).withValues(alpha: 0.2),
+                            width: 1.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withValues(alpha: 0.05),
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: InkWell(
+                            onTap: () {
+                              Navigator.pop(context);
+                              _selectCompany(response);
+                            },
+                            borderRadius: BorderRadius.circular(16),
+                            child: Padding(
+                              padding: const EdgeInsets.all(16.0),
+                              child: Row(
+                                children: [
+                                  // Иконка компании
+                                  Container(
+                                    width: 56,
+                                    height: 56,
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          const Color(0xFF87CEEB),
+                                          const Color(0xFF2D81E0),
+                                        ],
+                                      ),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: const Icon(
+                                      Icons.business_center,
+                                      color: Colors.white,
+                                      size: 28,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  // Информация
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          companyName,
+                                          style: const TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w700,
+                                            color: Colors.black87,
+                                            letterSpacing: -0.3,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                        const SizedBox(height: 6),
+                                        Row(
+                                          children: [
+                                            ...List.generate(5, (i) {
+                                              return Icon(
+                                                i < rating.round() ? Icons.star : Icons.star_border,
+                                                color: Colors.amber,
+                                                size: 14,
+                                              );
+                                            }),
+                                            const SizedBox(width: 6),
+                                            Text(
+                                              rating.toStringAsFixed(1),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w600,
+                                                color: Colors.grey[700],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Row(
+                                          children: [
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.green.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.attach_money,
+                                                    size: 12,
+                                                    color: Colors.green[700],
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    price > 0 ? '$price ₽' : 'По договорённости',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Colors.green[700],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.blue.withValues(alpha: 0.1),
+                                                borderRadius: BorderRadius.circular(6),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    Icons.access_time,
+                                                    size: 12,
+                                                    color: Colors.blue[700],
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    '$deadline ${_getDeadlineUnit(deadline)}',
+                                                    style: TextStyle(
+                                                      fontSize: 11,
+                                                      fontWeight: FontWeight.w600,
+                                                      color: Colors.blue[700],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Стрелка
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.grey[400],
+                                    size: 16,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ),
       ),
