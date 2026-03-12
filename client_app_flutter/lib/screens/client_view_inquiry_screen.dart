@@ -481,6 +481,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             ),
           ),
         ],
+        ),
       ),
     );
   }
@@ -526,7 +527,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
       
       if (companyCoordsStr != null && companyCoordsStr.toString().isNotEmpty) {
         final companyCoords = _parseCoordinates(companyCoordsStr.toString());
-        if (companyCoords != null && clientLat != null && clientLng != null) {
+        if (companyCoords != null) {
           final companyLat = companyCoords['lat']!;
           final companyLng = companyCoords['lng']!;
           
