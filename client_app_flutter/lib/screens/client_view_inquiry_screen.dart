@@ -2,12 +2,10 @@ import 'package:flutter/material.dart';
 import 'dart:math' as math;
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
-import '../services/remote_ordering_service.dart';
-import '../services/remote_company_service.dart';
+import '../services/order_response_service.dart';
 import '../services/remote_client_service.dart';
 import '../services/user_profile_service.dart';
 import '../utils/auth_guard.dart';
-import '../constants/categories.dart';
 import 'company_detail_screen.dart';
 
 class ClientViewInquiryScreen extends StatefulWidget {
@@ -20,10 +18,14 @@ class ClientViewInquiryScreen extends StatefulWidget {
 class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   InquiryModel? _inquiry;
   bool _isLoading = true;
-  List<Map<String, dynamic>> _companyResponses = [];
+  bool _isLoadingResponses = false;
+  List<CompanyOrderResponse> _companyResponses = [];
   int _searchRadiusKm = 20;
   String? _clientCoordinates; // Координаты клиента (lat,lng)
   String? _city; // Город клиента
+  String? _errorMessage;
+  
+  final OrderResponseService _responseService = OrderResponseService();
 
   @override
   void initState() {
@@ -34,123 +36,100 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   Future<void> _loadData() async {
     setState(() {
       _isLoading = true;
+      _errorMessage = null;
     });
 
-    // Загружаем заявку
-    final inquiry = await InquiryService.getCurrentInquiry();
-    
-    // Загружаем радиус поиска из настроек
-    final profile = await UserProfileService.getProfile();
-    _searchRadiusKm = profile?.searchRadiusKm ?? 20;
-
-    // Загружаем координаты и город клиента
-    final clientService = RemoteClientService();
-    final clientProfile = await clientService.getClientProfile();
-    if (clientProfile != null) {
-      _clientCoordinates = clientProfile['coordinates']?.toString();
-      final city = clientProfile['city']?.toString();
-      if (city != null && city.isNotEmpty) {
+    try {
+      // Загружаем заявку
+      final inquiry = await InquiryService.getCurrentInquiry();
+      
+      if (inquiry == null) {
         setState(() {
-          _city = city;
+          _inquiry = null;
+          _isLoading = false;
+          _errorMessage = 'Заявка не найдена';
         });
+        return;
       }
+
+      // Загружаем радиус поиска из настроек
+      final profile = await UserProfileService.getProfile();
+      _searchRadiusKm = profile?.searchRadiusKm ?? 20;
+
+      // Загружаем координаты и город клиента
+      await _loadClientProfile();
+
+      // Загружаем ответы компаний
+      await _loadCompanyResponses(inquiry);
+
+      setState(() {
+        _inquiry = inquiry;
+        _isLoading = false;
+      });
+    } catch (e) {
+      print('Error loading inquiry data: $e');
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Ошибка загрузки данных';
+      });
     }
-
-    if (inquiry != null) {
-      // Получаем заказы по ID заявки (ответы компаний)
-      final orderingService = RemoteOrderingService();
-      
-      // Пытаемся преобразовать ID в int для запроса к API
-      final orderRequestId = int.tryParse(inquiry.id);
-      
-      List<Map<String, dynamic>> relevantOrders = [];
-      if (orderRequestId != null) {
-        // Получаем заказы напрямую по order_request_id через API
-        final orders = await orderingService.getOrders(orderRequestId: orderRequestId);
-        relevantOrders = orders ?? [];
-      } else {
-        // Если ID не может быть преобразован в int, пытаемся найти заказы по строковому ID
-        // Получаем все заказы и фильтруем по строковому ID заявки
-        final allOrders = await orderingService.getOrders();
-        if (allOrders != null && inquiry.id.isNotEmpty) {
-          relevantOrders = allOrders.where((order) {
-            final reqId = order['order_request_id'] ?? order['orderRequestId'];
-            // Сравниваем как строки, так как ID может быть строкой
-            return reqId != null && reqId.toString() == inquiry.id;
-          }).toList();
-        }
-      }
-      
-      if (relevantOrders.isNotEmpty) {
-
-        // Загружаем информацию о компаниях для каждого заказа
-        final companyService = RemoteCompanyService();
-        final responses = <Map<String, dynamic>>[];
-        
-        // Получаем категорию заявки для фильтрации компаний
-        final inquiryCategory = inquiry?.category ?? '';
-        final categoryId = categoryTitleToId(inquiryCategory);
-        
-        // Получаем компании по категории (если категория известна)
-        List<Map<String, dynamic>>? companiesByCategory;
-        if (categoryId > 0) {
-          companiesByCategory = await companyService.getCompaniesByCategory(categoryId);
-        }
-        
-        // Создаем Map для быстрого поиска компаний по ID
-        final companiesMap = <String, Map<String, dynamic>>{};
-        if (companiesByCategory != null) {
-          for (final company in companiesByCategory) {
-            final guid = (company['guid'] ?? company['id'] ?? '').toString();
-            if (guid.isNotEmpty) {
-              companiesMap[guid] = company;
-            }
-          }
-        }
-        
-        for (final order in relevantOrders) {
-          final companyId = order['company_id'] ?? order['companyId'];
-          if (companyId != null) {
-            // Сначала пытаемся найти компанию в отфильтрованном списке
-            Map<String, dynamic>? company = companiesMap[companyId.toString()];
-            
-            // Если не найдена в отфильтрованном списке, получаем напрямую
-            if (company == null) {
-              company = await companyService.getCompany(companyId.toString());
-            }
-            
-            if (company != null) {
-              responses.add({
-                'order': order,
-                'company': company,
-              });
-            }
-          }
-        }
-        
-        setState(() {
-          _companyResponses = responses;
-        });
-      }
-    }
-
-    setState(() {
-      _inquiry = inquiry;
-      _isLoading = false;
-    });
   }
 
-  void _selectCompany(Map<String, dynamic> response) {
-    final company = response['company'] as Map<String, dynamic>;
-    final order = response['order'] as Map<String, dynamic>;
-    
+  /// Загружает профиль клиента (координаты и город)
+  Future<void> _loadClientProfile() async {
+    try {
+      final clientService = RemoteClientService();
+      final clientProfile = await clientService.getClientProfile();
+      if (clientProfile != null) {
+        _clientCoordinates = clientProfile['coordinates']?.toString();
+        final city = clientProfile['city']?.toString();
+        if (city != null && city.isNotEmpty) {
+          setState(() {
+            _city = city;
+          });
+        }
+      }
+    } catch (e) {
+      print('Error loading client profile: $e');
+    }
+  }
+
+  /// Загружает ответы компаний на заявку
+  Future<void> _loadCompanyResponses(InquiryModel inquiry) async {
+    setState(() {
+      _isLoadingResponses = true;
+    });
+
+    try {
+      final responses = await _responseService.getCompanyResponses(inquiry);
+      setState(() {
+        _companyResponses = responses;
+        _isLoadingResponses = false;
+      });
+    } catch (e) {
+      print('Error loading company responses: $e');
+      setState(() {
+        _companyResponses = [];
+        _isLoadingResponses = false;
+      });
+    }
+  }
+
+  /// Обновить данные (pull-to-refresh)
+  Future<void> _refreshData() async {
+    if (_inquiry != null) {
+      await _loadCompanyResponses(_inquiry!);
+    }
+  }
+
+  void _selectCompany(CompanyOrderResponse response) {
     // Открываем детальный экран компании
     Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CompanyDetailScreen(
-          company: company,
-          order: order,
+          company: response.company,
+          order: response.order,
           searchRadiusKm: _searchRadiusKm,
         ),
       ),
@@ -167,8 +146,25 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
 
     if (_inquiry == null) {
       return Scaffold(
-        appBar: AppBar(title: Text('Ошибка')),
-        body: Center(child: Text('Запрос не найден')),
+        appBar: AppBar(title: const Text('Ошибка')),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              Text(
+                _errorMessage ?? 'Запрос не найден',
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('Назад'),
+              ),
+            ],
+          ),
+        ),
       );
     }
 
@@ -223,8 +219,10 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
           ),
         ),
       ),
-      body: Stack(
-        children: [
+      body: RefreshIndicator(
+        onRefresh: _refreshData,
+        child: Stack(
+          children: [
           // Фоновая карта
           Container(
             decoration: const BoxDecoration(
@@ -255,15 +253,21 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
                   color: Colors.white.withValues(alpha: 0.9),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Text(
-                  _companyResponses.isEmpty
-                      ? 'Нет ответов от компаний'
-                      : 'Ответили в радиусе $_searchRadiusKm км: ${_companyResponses.length}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
+                child: _isLoadingResponses
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Text(
+                        _companyResponses.isEmpty
+                            ? 'Нет ответов от компаний'
+                            : 'Ответили в радиусе $_searchRadiusKm км: ${_companyResponses.length}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
               ),
             ),
           ),
@@ -389,16 +393,14 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
 
     for (int i = 0; i < _companyResponses.length; i++) {
       final response = _companyResponses[i];
-      final company = response['company'] as Map<String, dynamic>;
-      final order = response['order'] as Map<String, dynamic>;
       
-      final companyName = company['title'] ?? company['name'] ?? 'Компания';
-      final rating = (company['average_grade'] ?? company['rating'] as num?)?.toDouble() ?? 0.0;
-      final price = order['price'] ?? 0;
-      final deadline = order['deadline'] ?? 0;
+      final companyName = response.companyName;
+      final rating = response.rating;
+      final price = response.price;
+      final deadline = response.deadline;
 
       // Получаем координаты компании
-      final companyCoordsStr = company['coords'] ?? company['coordinates'];
+      final companyCoordsStr = response.company['coords'] ?? response.company['coordinates'];
       Offset? markerPosition;
       
       if (companyCoordsStr != null && companyCoordsStr.toString().isNotEmpty) {
@@ -602,12 +604,10 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             itemCount: _companyResponses.length,
             itemBuilder: (context, index) {
               final response = _companyResponses[index];
-              final company = response['company'] as Map<String, dynamic>;
-              final order = response['order'] as Map<String, dynamic>;
-              final companyName = company['title'] ?? company['name'] ?? 'Компания';
-              final rating = (company['average_grade'] ?? company['rating'] as num?)?.toDouble() ?? 0.0;
-              final price = order['price'] ?? 0;
-              final deadline = order['deadline'] ?? 0;
+              final companyName = response.companyName;
+              final rating = response.rating;
+              final price = response.price;
+              final deadline = response.deadline;
 
               return ListTile(
                 title: Text(companyName),

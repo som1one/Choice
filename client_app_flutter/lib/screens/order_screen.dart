@@ -26,6 +26,8 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _loadOrders() async {
+    if (!mounted) return;
+    
     setState(() {
       _isLoading = true;
     });
@@ -39,10 +41,17 @@ class _OrderScreenState extends State<OrderScreen> {
         });
       }
     } catch (e) {
+      print('Error loading orders: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
         });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка загрузки заказов: ${e.toString()}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
       }
     }
   }
@@ -202,22 +211,60 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _openOrderRequest(InquiryModel inquiry) async {
-    // Получаем полные данные заявки с бэкенда
-    final remoteService = RemoteInquiryService();
-    final orderData = await remoteService.getOrderRequest(int.tryParse(inquiry.id) ?? 0);
-    
-    if (orderData != null && mounted) {
-      final orderRequest = OrderRequestModel.fromJson(orderData);
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => OrderRequestScreen(orderRequest: orderRequest),
-        ),
-      ).then((_) => _loadOrders()); // Обновляем список после возврата
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Не удалось загрузить заявку')),
-      );
+    if (!mounted) return;
+
+    // Показываем индикатор загрузки
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => const Center(child: CircularProgressIndicator()),
+    );
+
+    try {
+      // Получаем полные данные заявки с бэкенда
+      final remoteService = RemoteInquiryService();
+      final orderRequestId = int.tryParse(inquiry.id);
+      
+      if (orderRequestId == null) {
+        if (mounted) {
+          Navigator.pop(context); // Закрываем индикатор загрузки
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Неверный ID заявки')),
+          );
+        }
+        return;
+      }
+
+      final orderData = await remoteService.getOrderRequest(orderRequestId);
+      
+      if (!mounted) return;
+      Navigator.pop(context); // Закрываем индикатор загрузки
+      
+      if (orderData != null) {
+        final orderRequest = OrderRequestModel.fromJson(orderData);
+        await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => OrderRequestScreen(orderRequest: orderRequest),
+          ),
+        );
+        // Обновляем список после возврата
+        _loadOrders();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Не удалось загрузить заявку')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        Navigator.pop(context); // Закрываем индикатор загрузки
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Ошибка: ${e.toString()}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
     }
   }
 
