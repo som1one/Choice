@@ -248,25 +248,75 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             right: 0,
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(20),
+                  gradient: LinearGradient(
+                    colors: [
+                      Colors.white,
+                      Colors.white.withValues(alpha: 0.95),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(
+                    color: _companyResponses.isEmpty
+                        ? Colors.grey[300]!
+                        : const Color(0xFF87CEEB).withValues(alpha: 0.3),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
                 ),
                 child: _isLoadingResponses
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(strokeWidth: 2),
+                    ? Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'Загрузка ответов...',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey[700],
+                            ),
+                          ),
+                        ],
                       )
-                    : Text(
-                        _companyResponses.isEmpty
-                            ? 'Нет ответов от компаний'
-                            : 'Ответили в радиусе $_searchRadiusKm км: ${_companyResponses.length}',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
+                    : Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            _companyResponses.isEmpty
+                                ? Icons.info_outline
+                                : Icons.check_circle,
+                            size: 18,
+                            color: _companyResponses.isEmpty
+                                ? Colors.grey[600]
+                                : const Color(0xFF87CEEB),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            _companyResponses.isEmpty
+                                ? 'Нет ответов от компаний'
+                                : 'Ответили в радиусе $_searchRadiusKm км: ${_companyResponses.length}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: _companyResponses.isEmpty
+                                  ? Colors.grey[700]
+                                  : const Color(0xFF2D81E0),
+                            ),
+                          ),
+                        ],
                       ),
               ),
             ),
@@ -278,69 +328,110 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             right: 80,
             child: _companyResponses.isEmpty
                 ? Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                     decoration: BoxDecoration(
-                      color: Colors.grey[300],
-                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: Colors.grey[300]!,
+                        width: 1.5,
+                      ),
                     ),
-                    child: const Column(
+                    child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
+                        Icon(
+                          Icons.hourglass_empty,
+                          size: 24,
+                          color: Colors.grey[600],
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
                           'Нет ответов от компаний',
                           style: TextStyle(
                             color: Colors.black87,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w500,
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
                           ),
                         ),
+                        const SizedBox(height: 4),
                         Text(
                           'Попробуйте позже',
                           style: TextStyle(
-                            color: Colors.black54,
-                            fontSize: 12,
+                            color: Colors.grey[600],
+                            fontSize: 13,
                           ),
                         ),
                       ],
                     ),
                   )
-                : GestureDetector(
-                    onTap: () {
-                      // Показываем диалог выбора компании
-                      _showCompanySelectionDialog();
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: Colors.lightBlue[300],
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'Сделайте выбор',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w500,
-                            ),
+                : Material(
+                    color: Colors.transparent,
+                    child: InkWell(
+                      onTap: () {
+                        // Показываем диалог выбора компании
+                        _showCompanySelectionDialog();
+                      },
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                        decoration: BoxDecoration(
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF2D81E0), Color(0xFF87CEEB)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
                           ),
-                          Text(
-                            'откроется информация',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
+                          borderRadius: BorderRadius.circular(16),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF2D81E0).withValues(alpha: 0.3),
+                              blurRadius: 12,
+                              offset: const Offset(0, 6),
                             ),
-                          ),
-                          Text(
-                            'от компании',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
+                          ],
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withValues(alpha: 0.2),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(
+                                Icons.touch_app,
+                                color: Colors.white,
+                                size: 20,
+                              ),
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 12),
+                            const Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Сделайте выбор',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.3,
+                                  ),
+                                ),
+                                SizedBox(height: 2),
+                                Text(
+                                  'откроется информация от компании',
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
@@ -349,14 +440,44 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
           Positioned(
             bottom: 20,
             right: 20,
-            child: Container(
-              width: 50,
-              height: 50,
-              decoration: BoxDecoration(
-                color: Colors.purple[200],
-                borderRadius: BorderRadius.circular(8),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                onTap: () {
+                  // TODO: Реализовать редактирование заявки
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Редактирование заявки'),
+                      duration: Duration(seconds: 2),
+                    ),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: 56,
+                  height: 56,
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFFBA68C8), Color(0xFF9C27B0)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.purple.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.edit,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
               ),
-              child: Icon(Icons.edit, color: Colors.purple[800]),
             ),
           ),
         ],
