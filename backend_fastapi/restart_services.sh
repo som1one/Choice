@@ -100,11 +100,22 @@ else
     tail -20 logs/company_service.log
 fi
 
+ORDERING_HEALTH=$(curl -s http://localhost:8005/health 2>/dev/null)
+if [ -n "$ORDERING_HEALTH" ]; then
+    echo "✓ Ordering Service: $ORDERING_HEALTH"
+else
+    echo "✗ Ordering Service: FAILED"
+    echo "Last 20 lines of log:"
+    tail -20 logs/ordering.log
+fi
+
 echo ""
 echo "=== Service PIDs ==="
 echo "Authentication Service: $AUTH_PID"
 echo "Company Service: $COMPANY_PID"
+echo "Ordering Service: $ORDERING_PID"
 echo ""
 echo "To view logs:"
 echo "  tail -f logs/authentication.log"
 echo "  tail -f logs/company_service.log"
+echo "  tail -f logs/ordering.log"
