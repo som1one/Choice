@@ -103,8 +103,6 @@ async def get_orders(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение заказов пользователя или по заявке"""
-    from .models import Order
-    
     repo = OrderRepository(db)
     user_id = current_user["id"]
     user_type = current_user.get("user_type")

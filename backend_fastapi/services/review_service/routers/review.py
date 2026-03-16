@@ -64,12 +64,13 @@ async def send_review(
     # Отправка события ReviewLeftEvent в RabbitMQ
     try:
         from common.rabbitmq_service import publish_event_sync
+        review_type = "Company" if current_user.get("user_type") == "Client" else "Client"
         publish_event_sync("ReviewLeftEvent", {
             "review_id": review.id,
-            "reviewer_id": str(review.reviewer_id),
-            "reviewed_id": str(review.reviewed_id),
+            "reviewer_id": str(review.sender_id),
+            "reviewed_id": str(review.receiver_id),
             "grade": review.grade,
-            "review_type": review.review_type,
+            "review_type": review_type,
         })
     except Exception as e:
         import logging

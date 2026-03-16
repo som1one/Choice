@@ -1,6 +1,7 @@
 """Роутеры для аутентификации"""
 import os
 import sys
+import logging
 from pathlib import Path
 
 # Добавить корневую директорию в путь для импортов ДО всех остальных импортов
@@ -49,6 +50,7 @@ except ImportError:
     logging.getLogger(__name__).warning("Could not import push_notification_service. Push notifications will be disabled.")
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 @router.post("/login", response_model=TokenResponse)
 async def login(request: LoginRequest, db: Session = Depends(get_db)):

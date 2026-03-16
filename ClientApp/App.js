@@ -260,12 +260,13 @@ function App() {
       }
     },
     signOut: async () => {
+      const currentUserType = userStore.getUserType();
       userStore.logout();
 
       setIsSignedIn(false);
       setUserType(0);
 
-      if (userStore.getUserType() != 3) {
+      if (currentUserType != 3) {
         await connectionService.stop();
       }
       await AsyncStorage.clear();
@@ -307,7 +308,8 @@ function App() {
 
         if (isMoreThanOneHourLeft) {
           await KeyChain.setGenericPassword('api_key', token);
-          let userType = decoded.type == 'Client' ? 1 : decoded.type == 'Company' ? 2 : 3;
+          const decodedType = decoded.user_type || decoded.type;
+          let userType = decodedType == 'Client' ? 1 : decodedType == 'Company' ? 2 : 3;
           await userStore.retrieveData(userType);
           setIsSignedIn(true);
           setUserType(userType);

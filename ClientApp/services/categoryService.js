@@ -1,86 +1,80 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
-const getCategories = async () => {
+const jsonHeaders = {
+    Accept: 'application/json',
+    'Content-Type': 'application/json'
+};
+
+const getTokenHeader = async () => {
     const token = await KeyChain.getGenericPassword();
-    
-    return await fetch(`${env.api_url}/api/Category/Get`, {
+    return token?.password ? { Authorization: `Bearer ${token.password}` } : {};
+};
+
+const parseJsonSafe = async (response) => {
+    try {
+        return await response.json();
+    } catch (_) {
+        return null;
+    }
+};
+
+const mapCategory = (raw) => ({
+    id: raw.id,
+    title: raw.title,
+    iconUri: raw.iconUri || raw.icon_uri || ''
+});
+
+const getCategories = async () => {
+    const authHeader = await getTokenHeader();
+    const response = await fetch(`${env.api_url}/api/category/get`, {
         method: 'GET',
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token.password}`
-        }
-    })
-    .then(async response => {
-        const json = await response.json();
-        return Object.keys(json).map((i) => ({
-            iconUri: json[i].iconUri,
-            title: json[i].title,
-            id: json[i].id
-        }));
-    })
-    .catch(error => {
-        console.log(error);
+        headers: { ...jsonHeaders, ...authHeader }
     });
-}
+    const json = await parseJsonSafe(response);
+    const list = Array.isArray(json) ? json : [];
+    return list.map(mapCategory);
+};
 
 const create = async (body) => {
-    const token = await KeyChain.getGenericPassword();
-    
-    return await fetch(`${env.api_url}/api/Category/Create`, {
+    const authHeader = await getTokenHeader();
+    const response = await fetch(`${env.api_url}/api/category/create`, {
         method: 'POST',
-        body: JSON.stringify(body),
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token.password}`
-        }
-    })
-    .then(response => response.status)
-    .catch(error => {
-        console.log(error);
+        body: JSON.stringify({
+            title: body.title,
+            icon_uri: body.icon_uri || body.iconUri || ''
+        }),
+        headers: { ...jsonHeaders, ...authHeader }
     });
-}
+    return response.status;
+};
 
 const update = async (body) => {
-    const token = await KeyChain.getGenericPassword();
-    
-    return await fetch(`${env.api_url}/api/Category/Update`, {
+    const authHeader = await getTokenHeader();
+    const response = await fetch(`${env.api_url}/api/category/update`, {
         method: 'PUT',
-        body: JSON.stringify(body),
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token.password}`
-        }
-    })
-    .then(response => response.status)
-    .catch(error => {
-        console.log(error);
+        body: JSON.stringify({
+            id: body.id,
+            title: body.title,
+            icon_uri: body.icon_uri || body.iconUri || ''
+        }),
+        headers: { ...jsonHeaders, ...authHeader }
     });
-}
+    return response.status;
+};
 
 const remove = async (id) => {
-    const token = await KeyChain.getGenericPassword();
-    
-    return await fetch(`${env.api_url}/api/Category/Delete?id=${id}`, {
+    const authHeader = await getTokenHeader();
+    const response = await fetch(`${env.api_url}/api/category/delete?category_id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
-        headers: {
-            Accept: 'application/json',
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token.password}`
-        }
-    })
-    .then(response => response.status)
-    .catch(error => {
-        console.log(error);
+        headers: { ...jsonHeaders, ...authHeader }
     });
-}
+    return response.status;
+};
 
 export default {
     create,
     update,
     getCategories,
     remove
-}
+};
