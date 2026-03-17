@@ -53,7 +53,7 @@ const buildOrderMessage = (payload = {}) => ({
 });
 
 const toWsUrl = () => {
-    const apiUrl = env.chat_ws_url || env.api_url || '';
+    const apiUrl = env.chat_ws_url || env.chat_url || env.api_url || '';
     const normalized = apiUrl
         .replace(/^https:\/\//i, 'wss://')
         .replace(/^http:\/\//i, 'ws://')

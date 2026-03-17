@@ -3,6 +3,7 @@ import env from '../env';
 import { DeviceEventEmitter } from 'react-native';
 
 let readMessages = [];
+const baseUrl = env.chat_url || env.api_url;
 
 const jsonHeaders = {
     Accept: 'application/json',
@@ -82,7 +83,7 @@ const mapChat = (raw) => {
 const getMessages = async (receiverId) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/message/getMessages?receiver_id=${encodeURIComponent(receiverId)}`, {
+    const response = await fetch(`${baseUrl}/api/message/getMessages?receiver_id=${encodeURIComponent(receiverId)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -95,7 +96,7 @@ const getMessages = async (receiverId) => {
 const getChat = async (userId) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/message/getChat?user_id=${encodeURIComponent(userId)}`, {
+    const response = await fetch(`${baseUrl}/api/message/getChat?user_id=${encodeURIComponent(userId)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -106,7 +107,7 @@ const getChat = async (userId) => {
 const getChats = async () => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/message/getChats`, {
+    const response = await fetch(`${baseUrl}/api/message/getChats`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -119,7 +120,7 @@ const getChats = async () => {
 const sendMessage = async (text, receiverId) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/message/send`, {
+    const response = await fetch(`${baseUrl}/api/message/send`, {
         method: 'POST',
         body: JSON.stringify({
             receiver_id: receiverId,
@@ -134,7 +135,7 @@ const sendMessage = async (text, receiverId) => {
 const sendImage = async (uri, receiverId) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/message/sendImage`, {
+    const response = await fetch(`${baseUrl}/api/message/sendImage`, {
         method: 'POST',
         body: JSON.stringify({
             receiver_id: receiverId,
@@ -153,7 +154,7 @@ const read = async (id) => {
         readMessages.push(id);
         DeviceEventEmitter.emit('tabRead');
 
-        return await fetch(`${env.api_url}/api/message/read?message_id=${encodeURIComponent(id)}`, {
+        return await fetch(`${baseUrl}/api/message/read?message_id=${encodeURIComponent(id)}`, {
             method: 'PUT',
             headers: { ...jsonHeaders, ...authHeader }
         });

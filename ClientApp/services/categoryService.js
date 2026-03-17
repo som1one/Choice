@@ -1,6 +1,8 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
+const baseUrl = env.category_url || env.api_url;
+
 const jsonHeaders = {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -27,7 +29,7 @@ const mapCategory = (raw) => ({
 
 const getCategories = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/category/get`, {
+    const response = await fetch(`${baseUrl}/api/category/get`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -38,7 +40,7 @@ const getCategories = async () => {
 
 const create = async (body) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/category/create`, {
+    const response = await fetch(`${baseUrl}/api/category/create`, {
         method: 'POST',
         body: JSON.stringify({
             title: body.title,
@@ -51,7 +53,7 @@ const create = async (body) => {
 
 const update = async (body) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/category/update`, {
+    const response = await fetch(`${baseUrl}/api/category/update`, {
         method: 'PUT',
         body: JSON.stringify({
             id: body.id,
@@ -65,7 +67,7 @@ const update = async (body) => {
 
 const remove = async (id) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/category/delete?category_id=${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/category/delete?category_id=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { ...jsonHeaders, ...authHeader }
     });

@@ -1,6 +1,8 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
+const baseUrl = env.review_url || env.api_url;
+
 const jsonHeaders = {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -44,7 +46,7 @@ const mapReview = (raw) => ({
 const send = async (review) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/review/send`, {
+    const response = await fetch(`${baseUrl}/api/review/send`, {
         method: 'POST',
         body: JSON.stringify({
             guid: review.guid,
@@ -61,7 +63,7 @@ const send = async (review) => {
 const get = async (userGuid) => {
     const authHeader = await getTokenHeader();
 
-    const response = await fetch(`${env.api_url}/api/review/get?guid=${encodeURIComponent(userGuid)}`, {
+    const response = await fetch(`${baseUrl}/api/review/get?guid=${encodeURIComponent(userGuid)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });

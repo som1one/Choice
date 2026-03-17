@@ -1,6 +1,8 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
+const baseUrl = env.ordering_url || env.api_url;
+
 const jsonHeaders = {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -42,7 +44,7 @@ const mapOrder = (raw) => {
 
 const createOrder = async (order) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/create`, {
+    const response = await fetch(`${baseUrl}/api/order/create`, {
         method: 'POST',
         body: JSON.stringify({
             receiver_id: order.receiver_id || order.receiverId,
@@ -59,7 +61,7 @@ const createOrder = async (order) => {
 
 const changeOrderEnrollmentDate = async (orderId, newDate) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/changeOrderEnrollmentDate`, {
+    const response = await fetch(`${baseUrl}/api/order/changeOrderEnrollmentDate`, {
         method: 'PUT',
         body: JSON.stringify({
             order_id: orderId,
@@ -72,7 +74,7 @@ const changeOrderEnrollmentDate = async (orderId, newDate) => {
 
 const confirmDate = async (orderId) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/confirmEnrollmentDate?order_id=${encodeURIComponent(orderId)}`, {
+    const response = await fetch(`${baseUrl}/api/order/confirmEnrollmentDate?order_id=${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -81,7 +83,7 @@ const confirmDate = async (orderId) => {
 
 const enroll = async (orderId) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/enroll?order_id=${encodeURIComponent(orderId)}`, {
+    const response = await fetch(`${baseUrl}/api/order/enroll?order_id=${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -90,7 +92,7 @@ const enroll = async (orderId) => {
 
 const finish = async (orderId) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/finishOrder?order_id=${encodeURIComponent(orderId)}`, {
+    const response = await fetch(`${baseUrl}/api/order/finishOrder?order_id=${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -99,7 +101,7 @@ const finish = async (orderId) => {
 
 const cancel = async (orderId) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/order/cancelEnrollment?order_id=${encodeURIComponent(orderId)}`, {
+    const response = await fetch(`${baseUrl}/api/order/cancelEnrollment?order_id=${encodeURIComponent(orderId)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });

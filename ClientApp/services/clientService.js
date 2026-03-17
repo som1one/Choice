@@ -1,6 +1,8 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
+const baseUrl = env.client_url || env.api_url;
+
 const jsonHeaders = {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -119,7 +121,7 @@ const toOrderPayload = (state = {}) => ({
 
 const get = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/get`, {
+    const response = await fetch(`${baseUrl}/api/client/get`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -128,7 +130,7 @@ const get = async () => {
 
 const getAdmin = async (guid) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/getClientAdmin?guid=${encodeURIComponent(guid)}`, {
+    const response = await fetch(`${baseUrl}/api/client/getClientAdmin?guid=${encodeURIComponent(guid)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -140,7 +142,7 @@ const getOrderRequest = async (categoriesId = []) => {
     const queryArray = categoriesId.map((id, i) => `categoriesId[${i}]=${encodeURIComponent(id)}`);
     const query = queryArray.length > 0 ? `?${queryArray.join('&')}` : '';
 
-    const response = await fetch(`${env.api_url}/api/client/getOrderRequests${query}`, {
+    const response = await fetch(`${baseUrl}/api/client/getOrderRequests${query}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -152,7 +154,7 @@ const getOrderRequest = async (categoriesId = []) => {
 
 const sendOrderRequest = async (orderRequest) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/sendOrderRequest`, {
+    const response = await fetch(`${baseUrl}/api/client/sendOrderRequest`, {
         method: 'POST',
         body: JSON.stringify(toOrderPayload(orderRequest)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -162,7 +164,7 @@ const sendOrderRequest = async (orderRequest) => {
 
 const getOrder = async (id) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/getRequest?request_id=${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/client/getRequest?request_id=${encodeURIComponent(id)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -171,7 +173,7 @@ const getOrder = async (id) => {
 
 const changeOrderRequest = async (orderRequest) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/changeOrderRequest`, {
+    const response = await fetch(`${baseUrl}/api/client/changeOrderRequest`, {
         method: 'PUT',
         body: JSON.stringify(toOrderPayload(orderRequest)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -181,7 +183,7 @@ const changeOrderRequest = async (orderRequest) => {
 
 const getClientRequests = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/getClientRequests`, {
+    const response = await fetch(`${baseUrl}/api/client/getClientRequests`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -192,7 +194,7 @@ const getClientRequests = async () => {
 
 const changeIconUri = async (iconUri) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/changeIconUri?uri=${encodeURIComponent(iconUri)}`, {
+    const response = await fetch(`${baseUrl}/api/client/changeIconUri?uri=${encodeURIComponent(iconUri)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -201,7 +203,7 @@ const changeIconUri = async (iconUri) => {
 
 const changeIconUriAdmin = async (id, iconUri) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/changeIconUriAdmin?guid=${encodeURIComponent(id)}&uri=${encodeURIComponent(iconUri)}`, {
+    const response = await fetch(`${baseUrl}/api/client/changeIconUriAdmin?guid=${encodeURIComponent(id)}&uri=${encodeURIComponent(iconUri)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -210,7 +212,7 @@ const changeIconUriAdmin = async (id, iconUri) => {
 
 const changeUserData = async (state) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/changeUserData`, {
+    const response = await fetch(`${baseUrl}/api/client/changeUserData`, {
         method: 'PUT',
         body: JSON.stringify(toClientPayload(state)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -221,7 +223,7 @@ const changeUserData = async (state) => {
 const changeUserDataAdmin = async (state) => {
     const authHeader = await getTokenHeader();
     const guid = state.guid || state.id;
-    const response = await fetch(`${env.api_url}/api/client/changeUserDataAdmin?guid=${encodeURIComponent(guid)}`, {
+    const response = await fetch(`${baseUrl}/api/client/changeUserDataAdmin?guid=${encodeURIComponent(guid)}`, {
         method: 'PUT',
         body: JSON.stringify(toClientPayload(state)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -231,7 +233,7 @@ const changeUserDataAdmin = async (state) => {
 
 const getAll = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/getClients`, {
+    const response = await fetch(`${baseUrl}/api/client/getClients`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -242,7 +244,7 @@ const getAll = async () => {
 
 const deleteClient = async (id) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/client/deleteClientAdmin?guid=${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/client/deleteClientAdmin?guid=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { ...jsonHeaders, ...authHeader }
     });

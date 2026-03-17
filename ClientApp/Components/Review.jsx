@@ -11,6 +11,17 @@ const Review = ({review}) => {
     const stars = [1,2,3,4,5];
     console.log(review);
     const wh = Dimensions.get('screen');
+    const authorName = review?.author?.name || 'User_User';
+    const shortName = (() => {
+        if (userStore.getUserType() == 2) {
+            return authorName;
+        }
+
+        const firstPart = authorName.split(' ')[0] || 'User';
+        const surnamePart = authorName.includes('_') ? authorName.split('_')[1] : '';
+        const initial = surnamePart ? surnamePart[0] : '';
+        return initial ? `${firstPart} ${initial}.` : firstPart;
+    })();
 
     return (
         <View
@@ -29,7 +40,7 @@ const Review = ({review}) => {
                         fontSize: 16,
                         color: 'black'
                     }}>
-                    {userStore.getUserType() == 2 ? review.author.name : `${review.author.name.split(' ')[0]} ${review.author.name.split('_')[1][0]}.`}
+                    {shortName}
                 </Text>
                 <View
                     style={{

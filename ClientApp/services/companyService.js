@@ -1,6 +1,8 @@
 import * as KeyChain from 'react-native-keychain';
 import env from '../env';
 
+const baseUrl = env.company_url || env.api_url;
+
 const jsonHeaders = {
     Accept: 'application/json',
     'Content-Type': 'application/json'
@@ -87,7 +89,7 @@ const toFillPayload = (data = {}) => ({
 
 const get = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/get`, {
+    const response = await fetch(`${baseUrl}/api/company/get`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -96,7 +98,7 @@ const get = async () => {
 
 const getAdmin = async (id) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/getCompanyAdmin?guid=${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/company/getCompanyAdmin?guid=${encodeURIComponent(id)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -105,7 +107,7 @@ const getAdmin = async (id) => {
 
 const fillCompanyData = async (data) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/fillCompanyData`, {
+    const response = await fetch(`${baseUrl}/api/company/fillCompanyData`, {
         method: 'PUT',
         body: JSON.stringify(toFillPayload(data)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -115,7 +117,7 @@ const fillCompanyData = async (data) => {
 
 const getCompany = async (guid) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/getCompany?guid=${encodeURIComponent(guid)}`, {
+    const response = await fetch(`${baseUrl}/api/company/getCompany?guid=${encodeURIComponent(guid)}`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -124,7 +126,7 @@ const getCompany = async (guid) => {
 
 const getAll = async () => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/getAll`, {
+    const response = await fetch(`${baseUrl}/api/company/getAll`, {
         method: 'GET',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -135,7 +137,7 @@ const getAll = async () => {
 
 const changeData = async (data) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/changeData`, {
+    const response = await fetch(`${baseUrl}/api/company/changeData`, {
         method: 'PUT',
         body: JSON.stringify(toChangeDataPayload(data)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -145,7 +147,7 @@ const changeData = async (data) => {
 
 const changeDataAdmin = async (data) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/changeDataAdmin`, {
+    const response = await fetch(`${baseUrl}/api/company/changeDataAdmin`, {
         method: 'PUT',
         body: JSON.stringify(toChangeDataAdminPayload(data)),
         headers: { ...jsonHeaders, ...authHeader }
@@ -155,7 +157,7 @@ const changeDataAdmin = async (data) => {
 
 const changeIconUri = async (iconUri) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/changeIconUri?uri=${encodeURIComponent(iconUri)}`, {
+    const response = await fetch(`${baseUrl}/api/company/changeIconUri?uri=${encodeURIComponent(iconUri)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -164,7 +166,7 @@ const changeIconUri = async (iconUri) => {
 
 const changeIconUriAdmin = async (guid, iconUri) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/changeIconUriAdmin?guid=${encodeURIComponent(guid)}&uri=${encodeURIComponent(iconUri)}`, {
+    const response = await fetch(`${baseUrl}/api/company/changeIconUriAdmin?guid=${encodeURIComponent(guid)}&uri=${encodeURIComponent(iconUri)}`, {
         method: 'PUT',
         headers: { ...jsonHeaders, ...authHeader }
     });
@@ -173,7 +175,7 @@ const changeIconUriAdmin = async (guid, iconUri) => {
 
 const deleteCompany = async (id) => {
     const authHeader = await getTokenHeader();
-    const response = await fetch(`${env.api_url}/api/company/delete?guid=${encodeURIComponent(id)}`, {
+    const response = await fetch(`${baseUrl}/api/company/delete?guid=${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { ...jsonHeaders, ...authHeader }
     });
