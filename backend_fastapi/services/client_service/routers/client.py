@@ -1,5 +1,9 @@
 """Роутеры для Client Service"""
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
+from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 from common.database import get_db
 from common.dependencies import get_current_user, require_admin
@@ -13,6 +17,7 @@ from ..repositories import ClientRepository, OrderRequestRepository
 import json
 
 router = APIRouter(prefix="/api/client", tags=["client"])
+logger = logging.getLogger(__name__)
 
 
 def _normalize_radius_meters(search_radius: int | None) -> int:
@@ -31,15 +36,121 @@ def _parse_coordinates(raw: str | None) -> tuple[float, float] | None:
     except (ValueError, AttributeError):
         return None
 
+
+def _normalize_user_guid(raw: str) -> str:
+    compact = (raw or "").replace("-", "")
+    if len(compact) == 32:
+        return (
+            f"{compact[:8]}-{compact[8:12]}-{compact[12:16]}-"
+            f"{compact[16:20]}-{compact[20:]}"
+        )
+    return raw
+
+
+async def _ensure_current_client(
+    db: Session,
+    current_user: dict,
+) -> Client | None:
+    """Возвращает профиль клиента, а если его нет — самовосстанавливает из Users."""
+    repository = ClientRepository(db)
+    user_id = current_user.get("id")
+    user_email = current_user.get("email")
+
+    client = None
+    if user_id:
+        client = await repository.get(user_id)
+    if not client and user_email:
+        client = await repository.get_by_email(user_email)
+
+    if client or current_user.get("user_type") != "Client":
+        return client
+
+    try:
+        auth_user = None
+        normalized_user_id = (user_id or "").replace("-", "")
+
+        if user_email:
+            auth_user = db.execute(
+                text(
+                    'SELECT id, email, user_name, phone_number, city, street, '
+                    'user_type, icon_uri '
+                    'FROM "Users" WHERE email = :email LIMIT 1'
+                ),
+                {"email": user_email},
+            ).mappings().first()
+
+        if not auth_user and normalized_user_id:
+            auth_user = db.execute(
+                text(
+                    'SELECT id, email, user_name, phone_number, city, street, '
+                    'user_type, icon_uri '
+                    'FROM "Users" WHERE REPLACE(CAST(id AS TEXT), \'-\', \'\') = :user_id '
+                    'LIMIT 1'
+                ),
+                {"user_id": normalized_user_id},
+            ).mappings().first()
+
+        if not auth_user or str(auth_user["user_type"]).upper() != "CLIENT":
+            return None
+
+        name_parts = (auth_user["user_name"] or "").split(maxsplit=1)
+        name = name_parts[0] if name_parts else auth_user["email"]
+        surname = name_parts[1] if len(name_parts) > 1 else ""
+
+        city = (auth_user["city"] or "").strip() or "-"
+        street = (auth_user["street"] or "").strip() or "-"
+        phone_number = (auth_user["phone_number"] or "").strip() or "0000000000"
+        coordinates = await geocode(city, street)
+        if not coordinates or not coordinates.strip():
+            coordinates = "55.7558,37.6173"
+
+        client = Client(
+            guid=_normalize_user_guid(str(auth_user["id"])),
+            name=name,
+            surname=surname,
+            email=auth_user["email"],
+            phone_number=phone_number,
+            city=city,
+            street=street,
+            coordinates=coordinates,
+            icon_uri=auth_user["icon_uri"],
+        )
+        db.add(client)
+        db.commit()
+        db.refresh(client)
+        logger.info("Auto-created missing client profile for user %s", auth_user["id"])
+        return client
+    except IntegrityError:
+        db.rollback()
+        client = None
+        if user_id:
+            client = await repository.get(user_id)
+        if not client and user_email:
+            client = await repository.get_by_email(user_email)
+        if client:
+            logger.info(
+                "Client profile was created concurrently for user %s",
+                user_id or user_email,
+            )
+            return client
+        logger.error(
+            "Client profile creation hit IntegrityError but record is still missing "
+            "for user %s",
+            user_id or user_email,
+        )
+        return None
+    except Exception as exc:
+        db.rollback()
+        logger.error("Failed to auto-create missing client profile: %s", exc)
+        return None
+
 @router.get("/get", response_model=ClientResponse)
 async def get_client(
     db: Session = Depends(get_db),
     current_user: dict = Depends(get_current_user)
 ):
     """Получение данных клиента"""
-    user_email = current_user["email"]
-    repository = ClientRepository(db)
-    client = await repository.get_by_email(user_email)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(
@@ -112,9 +223,8 @@ async def change_user_data(
     current_user: dict = Depends(get_current_user)
 ):
     """Изменение данных клиента"""
-    user_id = current_user["id"]
     repository = ClientRepository(db)
-    client = await repository.get(user_id)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(
@@ -226,9 +336,8 @@ async def change_icon_uri(
     current_user: dict = Depends(get_current_user)
 ):
     """Изменение иконки клиента"""
-    user_id = current_user["id"]
     repository = ClientRepository(db)
-    client = await repository.get(user_id)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(
@@ -342,9 +451,8 @@ async def send_order_request(
     current_user: dict = Depends(get_current_user)
 ):
     """Создание заявки на заказ"""
-    user_id = current_user["id"]
     client_repo = ClientRepository(db)
-    client = await client_repo.get(user_id)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(
@@ -426,8 +534,7 @@ async def get_order_requests(
     
     # Для клиентов - возвращаем их заявки
     if user_type == "Client":
-        client_repo = ClientRepository(db)
-        client = await client_repo.get(user_id)
+        client = await _ensure_current_client(db, current_user)
         
         if not client:
             return []
@@ -576,9 +683,7 @@ async def get_client_requests(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение заявок клиента"""
-    user_id = current_user["id"]
-    client_repo = ClientRepository(db)
-    client = await client_repo.get(user_id)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(
@@ -699,9 +804,8 @@ async def delete_photo(
     current_user: dict = Depends(get_current_user)
 ):
     """Удаление фото клиента"""
-    user_id = current_user["id"]
     repository = ClientRepository(db)
-    client = await repository.get(user_id)
+    client = await _ensure_current_client(db, current_user)
     
     if not client:
         raise HTTPException(

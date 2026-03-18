@@ -279,6 +279,7 @@ async def consume_event(
         log_interval = 60  # Логировать ошибку не чаще раза в минуту
         
         while True:
+            consumer_tag = None
             try:
                 # Не сбрасываем глобальные переменные - функции get_channel() и get_exchange()
                 # автоматически проверяют состояние соединения и переподключаются при необходимости
@@ -322,22 +323,25 @@ async def consume_event(
                 
                 logger.info(f"Started consumer for {event_type} on queue {queue_name}")
                 
-                # Начинаем слушать очередь (блокирующий вызов)
-                await queue.consume(message_handler)
-                
-                # Если дошли сюда, значит соединение разорвано
-                disconnect_count += 1
-                current_time = asyncio.get_event_loop().time()
-                # Логируем отключение не чаще раза в минуту
-                if disconnect_count == 1 or (current_time - last_disconnect_log_time) >= log_interval:
-                    logger.warning(f"Consumer for {event_type} disconnected, reconnecting... (disconnect #{disconnect_count})")
-                    last_disconnect_log_time = current_time
-                await asyncio.sleep(retry_delay)
+                # aio-pika возвращает consumer_tag сразу, поэтому удерживаем
+                # задачу живой до отмены/реального исключения.
+                consumer_tag = await queue.consume(message_handler)
+                await asyncio.Future()
                 
             except asyncio.CancelledError:
+                if consumer_tag and channel and not channel.is_closed:
+                    try:
+                        await queue.cancel(consumer_tag)
+                    except Exception:
+                        pass
                 logger.info(f"Consumer for {event_type} cancelled")
                 break
             except Exception as e:
+                if consumer_tag and 'queue' in locals():
+                    try:
+                        await queue.cancel(consumer_tag)
+                    except Exception:
+                        pass
                 disconnect_count += 1
                 current_time = asyncio.get_event_loop().time()
                 # Логируем ошибки не чаще раза в минуту

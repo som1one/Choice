@@ -3,10 +3,11 @@ import 'api_config.dart';
 
 class RemoteClientService {
   /// Получить профиль клиента (текущего пользователя)
-  Future<Map<String, dynamic>?> getClientProfile() async {
+  Future<Map<String, dynamic>?> getClientProfile({bool throwOnError = false}) async {
     final json = await ApiClient.getJson(
       '/api/client/get',
       baseUrl: ApiConfig.clientBaseUrl,
+      throwOnError: throwOnError,
     );
     return json;
   }

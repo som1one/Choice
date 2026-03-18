@@ -16,6 +16,7 @@ import '../services/remote_client_service.dart';
 import '../services/auth_service.dart';
 import '../services/remote_file_service.dart';
 import '../services/api_config.dart';
+import '../services/api_exception.dart';
 
 class ServiceQueryScreen extends StatefulWidget {
   final String category;
@@ -34,11 +35,12 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   bool _knowAppointment = true;
   bool _hasText = false;
   
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  stt.SpeechToText? _speech;
+  bool _speechInitialized = false;
   bool _isListening = false;
   bool _isLoading = false;
   String? _attachmentPath;
-  final ImagePicker _imagePicker = ImagePicker();
+  ImagePicker? _imagePicker;
   String _clientName = 'Клиент';
   String? _city; // Загружается из API
 
@@ -51,7 +53,6 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
       });
     });
     _loadClientSettings();
-    _initializeSpeech();
   }
 
   Future<void> _loadClientSettings() async {
@@ -68,9 +69,28 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
     // Загружаем город из профиля клиента (обязательно)
     final userType = await AuthService.getUserType();
     if (userType == UserType.client) {
+      final clientService = RemoteClientService();
       try {
-        final clientService = RemoteClientService();
-        final clientProfile = await clientService.getClientProfile();
+        Map<String, dynamic>? clientProfile;
+        for (var attempt = 0; attempt < 5; attempt++) {
+          try {
+            clientProfile = await clientService.getClientProfile(
+              throwOnError: true,
+            );
+            if (clientProfile != null) {
+              break;
+            }
+          } on ApiException catch (e) {
+            if (e.statusCode != 404) {
+              rethrow;
+            }
+          }
+
+          if (attempt < 4) {
+            await Future.delayed(const Duration(milliseconds: 500));
+          }
+        }
+
         if (clientProfile != null && mounted) {
           final city = clientProfile['city']?.toString();
           if (city != null && city.isNotEmpty) {
@@ -78,7 +98,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
               _city = city;
             });
           } else {
-            // Если город не найден в профиле, показываем ошибку
+            // Показываем ошибку только если профиль действительно уже есть.
             if (mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
@@ -88,19 +108,9 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
               );
             }
           }
-        } else {
-          // Если профиль не загружен, показываем ошибку
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Не удалось загрузить профиль. Пожалуйста, проверьте подключение.'),
-                duration: Duration(seconds: 3),
-              ),
-            );
-          }
         }
       } catch (e) {
-        // Если ошибка при загрузке, показываем сообщение
+        // Не блокируем создание заявки вторичной ошибкой профиля.
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
@@ -114,37 +124,55 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   }
 
   Future<void> _initializeSpeech() async {
-    bool available = await _speech.initialize(
+    if (_speechInitialized) {
+      return;
+    }
+
+    _speech ??= stt.SpeechToText();
+    final available = await _speech!.initialize(
       onStatus: (status) {
-        setState(() {
-          _isListening = status == 'listening';
-        });
+        if (mounted) {
+          setState(() {
+            _isListening = status == 'listening';
+          });
+        }
       },
       onError: (error) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка распознавания речи: ${error.errorMsg}')),
-        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Ошибка распознавания речи: ${error.errorMsg}')),
+          );
+        }
       },
     );
     if (!available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Голосовой ввод недоступен')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Голосовой ввод недоступен')),
+        );
+      }
+      return;
     }
+    _speechInitialized = true;
   }
 
   Future<void> _attachFile() async {
     try {
-      // Запрашиваем разрешение на доступ к файлам только для мобильных платформ
       bool isMobile = false;
+      bool isAndroid = false;
+      bool isIOS = false;
       try {
-        isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+        isAndroid = !kIsWeb && Platform.isAndroid;
+        isIOS = !kIsWeb && Platform.isIOS;
+        isMobile = isAndroid || isIOS;
       } catch (e) {
-        // Если Platform недоступен, продолжаем без проверки разрешений
         isMobile = false;
       }
 
-      if (isMobile) {
+      // На iOS image_picker/file_picker сами показывают системные диалоги.
+      // storage permission через permission_handler там не нужен и только
+      // повышает риск нативных падений.
+      if (isAndroid) {
         try {
           final status = await Permission.storage.request();
           if (!status.isGranted) {
@@ -200,7 +228,8 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
         }
         
         try {
-          final XFile? image = await _imagePicker.pickImage(
+          _imagePicker ??= ImagePicker();
+          final XFile? image = await _imagePicker!.pickImage(
             source: result == 'gallery' ? ImageSource.gallery : ImageSource.camera,
           );
           
@@ -247,20 +276,20 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
 
   Future<void> _startListening() async {
     if (_isListening) {
-      await _speech.stop();
+      await _speech?.stop();
       return;
     }
 
     // Запрашиваем разрешение на микрофон только для мобильных платформ
-    bool isMobile = false;
+    bool isAndroid = false;
     try {
-      isMobile = !kIsWeb && (Platform.isAndroid || Platform.isIOS);
+      isAndroid = !kIsWeb && Platform.isAndroid;
     } catch (e) {
-      // Если Platform недоступен, продолжаем без проверки разрешений
-      isMobile = false;
+      isAndroid = false;
     }
 
-    if (isMobile) {
+    // На iOS speech_to_text сам инициирует системный permission flow.
+    if (isAndroid) {
       try {
         final status = await Permission.microphone.request();
         if (!status.isGranted) {
@@ -274,15 +303,12 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
       }
     }
 
-    bool available = await _speech.initialize();
-    if (!available) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Голосовой ввод недоступен')),
-      );
+    await _initializeSpeech();
+    if (!_speechInitialized) {
       return;
     }
 
-    await _speech.listen(
+    await _speech!.listen(
       onResult: (result) {
         setState(() {
           _questionController.text = result.recognizedWords;
@@ -297,7 +323,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   @override
   void dispose() {
     _questionController.dispose();
-    _speech.stop();
+    _speech?.stop();
     super.dispose();
   }
 

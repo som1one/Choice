@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
+import 'dart:io' show Platform;
 import 'screens/welcome_screen.dart';
 import 'navigation/client_tab_navigator.dart';
 import 'navigation/company_tab_navigator.dart';
@@ -25,27 +26,41 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
-  // Инициализация Firebase (только для мобильных платформ, не для веб)
-  if (!kIsWeb) {
-    try {
-      // Проверяем, не инициализирован ли уже Firebase
-      if (Firebase.apps.isEmpty) {
-        await Firebase.initializeApp();
-      }
-      // Регистрация обработчика фоновых сообщений
-      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-      // Инициализация push-уведомлений
-      await PushNotificationService.initialize();
-    } catch (e) {
-      debugPrint('Firebase initialization error: $e');
-      // Продолжаем работу приложения даже если Firebase не инициализирован
-    }
-  } else {
-    debugPrint('Firebase skipped on web platform');
-  }
-  
   runApp(const MyApp());
+
+  WidgetsBinding.instance.addPostFrameCallback((_) {
+    _initializeMobileServices();
+  });
+}
+
+Future<void> _initializeMobileServices() async {
+  if (kIsWeb) {
+    debugPrint('Firebase skipped on web platform');
+    return;
+  }
+
+  try {
+    if (Firebase.apps.isEmpty) {
+      await Firebase.initializeApp();
+    }
+
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+
+    // На iOS не блокируем старт приложения и не даем push-инициализации
+    // ломать базовый UI, если проект еще не полностью настроен под Firebase.
+    if (Platform.isIOS) {
+      try {
+        await PushNotificationService.initialize();
+      } catch (e) {
+        debugPrint('Push initialization skipped on iOS: $e');
+      }
+      return;
+    }
+
+    await PushNotificationService.initialize();
+  } catch (e) {
+    debugPrint('Firebase initialization error: $e');
+  }
 }
 
 class MyApp extends StatelessWidget {

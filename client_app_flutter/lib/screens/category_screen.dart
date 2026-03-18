@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'service_query_screen.dart';
 import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
+import '../services/api_exception.dart';
 import '../services/remote_client_service.dart';
 
 class CategoryScreen extends StatefulWidget {
@@ -34,21 +35,34 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Future<void> _loadCity() async {
     final userType = await AuthService.getUserType();
     if (userType == UserType.client) {
-      try {
-        final clientService = RemoteClientService();
-        final clientProfile = await clientService.getClientProfile();
-        if (clientProfile != null && mounted) {
-          final city = clientProfile['city']?.toString();
-          if (city != null && city.isNotEmpty) {
-            setState(() {
-              _city = city;
-              _isLoadingCity = false;
-            });
-            return;
+      final clientService = RemoteClientService();
+      for (var attempt = 0; attempt < 5; attempt++) {
+        try {
+          final clientProfile = await clientService.getClientProfile(
+            throwOnError: true,
+          );
+          if (clientProfile != null && mounted) {
+            final city = clientProfile['city']?.toString();
+            if (city != null && city.isNotEmpty) {
+              setState(() {
+                _city = city;
+                _isLoadingCity = false;
+              });
+              return;
+            }
           }
+        } on ApiException catch (e) {
+          // Сразу после регистрации профиль клиента может появиться с небольшой задержкой.
+          if (e.statusCode != 404) {
+            break;
+          }
+        } catch (_) {
+          break;
         }
-      } catch (e) {
-        // Ошибка загрузки города
+
+        if (attempt < 4) {
+          await Future.delayed(const Duration(milliseconds: 500));
+        }
       }
     }
     if (mounted) {
