@@ -17,6 +17,7 @@ class RemoteInquiryService {
       'to_know_price': inquiry.wantsPrice,
       // closest mapping from UI checkboxes to backend flags
       'to_know_deadline': inquiry.wantsTime,
+      'to_know_specialist': inquiry.wantsSpecialist,
       'to_know_enrollment_date': inquiry.wantsAppointmentTime,
       'photo_uris': inquiry.attachmentUrl == null ? <String>[] : <String>[inquiry.attachmentUrl!],
     };
@@ -48,6 +49,7 @@ class RemoteInquiryService {
     required int searchRadius,
     required bool toKnowPrice,
     required bool toKnowDeadline,
+    required bool toKnowSpecialist,
     required bool toKnowEnrollmentDate,
     required List<String> photoUris,
   }) async {
@@ -58,6 +60,7 @@ class RemoteInquiryService {
       'search_radius': searchRadius,
       'to_know_price': toKnowPrice,
       'to_know_deadline': toKnowDeadline,
+      'to_know_specialist': toKnowSpecialist,
       'to_know_enrollment_date': toKnowEnrollmentDate,
       'photo_uris': photoUris,
     };
@@ -94,6 +97,8 @@ class RemoteInquiryService {
         final desc = (item['description'] as String?) ?? '';
         final toKnowPrice = (item['to_know_price']?.toString() ?? 'false') == 'true';
         final toKnowDeadline = (item['to_know_deadline']?.toString() ?? 'false') == 'true';
+        final toKnowSpecialist =
+            (item['to_know_specialist']?.toString() ?? 'false') == 'true';
         final toKnowEnroll = (item['to_know_enrollment_date']?.toString() ?? 'false') == 'true';
 
         mapped.add(
@@ -105,6 +110,7 @@ class RemoteInquiryService {
             createdAt: DateTime.now(),
             wantsPrice: toKnowPrice,
             wantsTime: toKnowDeadline,
+            wantsSpecialist: toKnowSpecialist,
             wantsAppointmentTime: toKnowEnroll,
           ),
         );

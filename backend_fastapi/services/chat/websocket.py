@@ -7,9 +7,38 @@ from .models import ChatUser, UserStatus, Message, MessageType
 from .repositories import UserRepository, MessageRepository
 from typing import Dict
 import json
+import uuid as uuid_lib
+from services.client_service.models import Client
+from services.company_service.models import Company
 
 # Хранилище активных подключений
 active_connections: Dict[str, WebSocket] = {}
+
+def _parse_uuid(value: str | None) -> uuid_lib.UUID | None:
+    if not value:
+        return None
+    try:
+        return uuid_lib.UUID(str(value))
+    except Exception:
+        return None
+
+def _normalize_user_identifier(db: Session, raw_id: str | None) -> str | None:
+    if raw_id is None:
+        return None
+    candidate = str(raw_id).strip()
+    if not candidate:
+        return None
+    if _parse_uuid(candidate):
+        return candidate
+    if candidate.isdigit():
+        numeric_id = int(candidate)
+        client = db.query(Client).filter(Client.id == numeric_id).first()
+        if client:
+            return str(client.guid)
+        company = db.query(Company).filter(Company.id == numeric_id).first()
+        if company:
+            return str(company.guid)
+    return candidate
 
 async def get_current_user_ws(websocket: WebSocket, token: str) -> dict:
     """Получение пользователя из токена для WebSocket"""
@@ -114,7 +143,9 @@ async def handle_send_message(message_data: dict, sender_id: str, db: Session):
     
     # Преобразуем ID в строки для единообразия
     sender_id_str = str(sender_id)
-    receiver_id_str = str(receiver_id)
+    receiver_id_str = _normalize_user_identifier(db, str(receiver_id))
+    if not receiver_id_str:
+        return
     
     # Создаем сообщение в БД
     repo = MessageRepository(db)
@@ -199,7 +230,7 @@ async def handle_read_message(message_data: dict, user_id: str, db: Session):
         return
     
     # Проверяем, что пользователь является получателем сообщения
-    if message.receiver_id != user_id:
+    if str(message.receiver_id) != str(user_id):
         return
     
     # Отмечаем сообщение как прочитанное

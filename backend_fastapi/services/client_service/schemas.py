@@ -33,11 +33,13 @@ class OrderRequestResponse(BaseModel):
     """Ответ с заявкой на заказ"""
     id: int
     client_id: int
+    client_guid: Optional[str] = None
     category_id: int
     description: str
     search_radius: int
     to_know_price: str
     to_know_deadline: str
+    to_know_specialist: str
     to_know_enrollment_date: str
     photo_uris: Optional[str]
     status: int
@@ -52,6 +54,7 @@ class SendOrderRequestRequest(BaseModel):
     search_radius: int
     to_know_price: bool = False
     to_know_deadline: bool = False
+    to_know_specialist: bool = False
     to_know_enrollment_date: bool = False
     photo_uris: List[str] = []
 
@@ -63,5 +66,6 @@ class ChangeOrderRequestRequest(BaseModel):
     search_radius: int
     to_know_price: bool = False
     to_know_deadline: bool = False
+    to_know_specialist: bool = False
     to_know_enrollment_date: bool = False
     photo_uris: List[str] = []

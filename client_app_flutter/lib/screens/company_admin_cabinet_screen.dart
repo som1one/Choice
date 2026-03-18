@@ -3,8 +3,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../services/auth_service.dart';
-import '../services/remote_company_service.dart';
-import '../services/remote_admin_service.dart';
 import '../utils/auth_guard.dart';
 import 'company_login_screen.dart';
 import 'welcome_screen.dart';
@@ -40,7 +38,6 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
   String? _photoPath;
   Color _selectedCardColor = Colors.blue;
   final ImagePicker _picker = ImagePicker();
-  bool _isLoading = false;
   
   // Список рейтинговых критериев (действий)
   List<String> _ratingCriteria = [
@@ -91,7 +88,6 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
     }
 
     _loadSettings();
-    _loadCompanyData();
   }
 
   @override
@@ -138,7 +134,7 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
     final data = <String, dynamic>{
       'logoPath': _logoPath,
       'photoPath': _photoPath,
-      'cardColor': _selectedCardColor.value,
+      'cardColor': _selectedCardColor.toARGB32(),
       'ratingCriteria': _ratingCriteria,
       'services': _services,
     };
@@ -155,21 +151,6 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
         const SnackBar(content: Text('Настройки сохранены')),
       );
     }
-  }
-
-  Future<void> _loadCompanyData() async {
-    // TODO: Загрузить данные компании из API
-    setState(() {
-      _isLoading = true;
-    });
-    
-    // Здесь будет загрузка данных компании
-    // final companyService = RemoteCompanyService();
-    // final company = await companyService.getCompanyProfile();
-    
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   Future<void> _pickImage(ImageSource source, {bool isLogo = false}) async {
@@ -269,14 +250,12 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
           ),
         ),
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+      body: SingleChildScrollView(
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
                     // Секция КОМПАНИЯ
                     const Center(
                       child: Text(
@@ -332,7 +311,7 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
 
                     const SizedBox(height: 24),
 
-                    // Кнопки действий
+                    // Рабочие действия по изображениям
                     _buildActionButtons(),
 
                     const Divider(height: 32, thickness: 1, color: Colors.black),
@@ -395,52 +374,12 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
 
                     const SizedBox(height: 32),
 
-                    // Кнопки редактирования
-                    Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _editCompany,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            child: const Text(
-                              'Редактировать компанию',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: _editClient,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              padding: const EdgeInsets.symmetric(vertical: 16),
-                            ),
-                            child: const Text(
-                              'Редактировать клиента',
-                              style: TextStyle(color: Colors.white),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
                     _buildLogoutButton(),
 
-                    const SizedBox(height: 80), // Отступ для FAB
-                  ],
-                ),
-              ),
-            ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Реализовать редактирование
-        },
-        backgroundColor: Colors.purple[200],
-        child: Icon(Icons.edit, color: Colors.purple[800]),
+              const SizedBox(height: 80), // Отступ для FAB
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -486,25 +425,6 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildActionButton('Добавить товар', Icons.add_shopping_cart, () {
-                // TODO: Реализовать добавление товара
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Добавление товара')),
-                );
-              }),
-            ),
-            const SizedBox(width: 8),
-            const Icon(Icons.attach_file, size: 20),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildActionButton('Добавить услугу', Icons.add_business, _addService),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
               child: _buildActionButton('Фото добавить', Icons.add_photo_alternate, () {
                 _pickImage(ImageSource.gallery);
               }),
@@ -545,13 +465,16 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildActionButton('Добавить на карту', Icons.add_location, () {}),
+              child: _buildActionButton(
+                'Добавить услугу',
+                Icons.add_business,
+                _addService,
+              ),
             ),
             const SizedBox(width: 8),
-            const Icon(Icons.attach_file, size: 20),
-            const SizedBox(width: 8),
+            const SizedBox(width: 20),
             Expanded(
-              child: _buildActionButton('Удалить с карты', Icons.location_off, () {}),
+              child: _buildActionButton('Сохранить', Icons.save, _saveSettings),
             ),
           ],
         ),
@@ -645,7 +568,8 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
       spacing: 12,
       runSpacing: 12,
       children: colors.map((color) {
-        final isSelected = _selectedCardColor.value == color.value;
+        final isSelected =
+            _selectedCardColor.toARGB32() == color.toARGB32();
         return GestureDetector(
           onTap: () {
             setState(() {
@@ -669,20 +593,6 @@ class _CompanyAdminCabinetScreenState extends State<CompanyAdminCabinetScreen> {
           ),
         );
       }).toList(),
-    );
-  }
-
-  void _editCompany() {
-    // TODO: Реализовать редактирование компании
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Редактирование компании')),
-    );
-  }
-
-  void _editClient() {
-    // TODO: Реализовать редактирование клиента
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Редактирование клиента')),
     );
   }
 

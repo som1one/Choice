@@ -5,6 +5,7 @@ class OrderRequestModel {
   final int searchRadius; // в метрах
   final bool toKnowPrice;
   final bool toKnowDeadline;
+  final bool toKnowSpecialist;
   final bool toKnowEnrollmentDate;
   final List<String> photoUris; // максимум 3
   final int status; // 0 - Active, 1 - Draft, 2 - Finished, 3 - Canceled
@@ -17,6 +18,7 @@ class OrderRequestModel {
     required this.searchRadius,
     this.toKnowPrice = false,
     this.toKnowDeadline = false,
+    this.toKnowSpecialist = false,
     this.toKnowEnrollmentDate = false,
     this.photoUris = const [],
     this.status = 0,
@@ -31,6 +33,7 @@ class OrderRequestModel {
       'search_radius': searchRadius,
       'to_know_price': toKnowPrice,
       'to_know_deadline': toKnowDeadline,
+      'to_know_specialist': toKnowSpecialist,
       'to_know_enrollment_date': toKnowEnrollmentDate,
       'photo_uris': photoUris,
     };
@@ -64,6 +67,8 @@ class OrderRequestModel {
 
     final toKnowPriceStr = json['to_know_price']?.toString() ?? 'false';
     final toKnowDeadlineStr = json['to_know_deadline']?.toString() ?? 'false';
+    final toKnowSpecialistStr =
+        json['to_know_specialist']?.toString() ?? 'false';
     final toKnowEnrollStr = json['to_know_enrollment_date']?.toString() ?? 'false';
 
     return OrderRequestModel(
@@ -73,6 +78,7 @@ class OrderRequestModel {
       searchRadius: (json['search_radius'] as num?)?.toInt() ?? (json['searchRadius'] as num?)?.toInt() ?? 0,
       toKnowPrice: toKnowPriceStr == 'true',
       toKnowDeadline: toKnowDeadlineStr == 'true',
+      toKnowSpecialist: toKnowSpecialistStr == 'true',
       toKnowEnrollmentDate: toKnowEnrollStr == 'true',
       photoUris: photoUris,
       status: (json['status'] as num?)?.toInt() ?? 0,
@@ -91,6 +97,7 @@ class OrderRequestModel {
     int? searchRadius,
     bool? toKnowPrice,
     bool? toKnowDeadline,
+    bool? toKnowSpecialist,
     bool? toKnowEnrollmentDate,
     List<String>? photoUris,
     int? status,
@@ -103,6 +110,7 @@ class OrderRequestModel {
       searchRadius: searchRadius ?? this.searchRadius,
       toKnowPrice: toKnowPrice ?? this.toKnowPrice,
       toKnowDeadline: toKnowDeadline ?? this.toKnowDeadline,
+      toKnowSpecialist: toKnowSpecialist ?? this.toKnowSpecialist,
       toKnowEnrollmentDate: toKnowEnrollmentDate ?? this.toKnowEnrollmentDate,
       photoUris: photoUris ?? this.photoUris,
       status: status ?? this.status,

@@ -3,7 +3,6 @@
 import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
-import '../services/auth_service.dart';
 import '../services/remote_ordering_service.dart';
 import '../utils/auth_guard.dart';
 import 'client_inquiry_screen.dart';
@@ -18,6 +17,7 @@ class CompanyInquiriesScreen extends StatefulWidget {
 
 class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
   List<InquiryModel> _allInquiries = [];
+  Map<int, Map<String, dynamic>> _ordersByRequestId = {};
   bool _isLoading = true;
   bool _showOnlyPending = true;
 
@@ -29,26 +29,36 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
 
   Future<void> _loadInquiries() async {
     final allInquiries = await InquiryService.getAllInquiries();
+    final orders = await RemoteOrderingService().getOrders();
 
     allInquiries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    final ordersByRequestId = <int, Map<String, dynamic>>{};
+    if (orders != null) {
+      for (final order in orders) {
+        final rawId = order['order_request_id'] ?? order['orderRequestId'];
+        final requestId = rawId is num ? rawId.toInt() : int.tryParse(rawId?.toString() ?? '');
+        if (requestId != null) {
+          ordersByRequestId[requestId] = order;
+        }
+      }
+    }
 
     setState(() {
       _allInquiries = allInquiries;
+      _ordersByRequestId = ordersByRequestId;
       _isLoading = false;
     });
   }
 
   bool _isPending(InquiryModel inquiry) {
-    return inquiry.companyResponse == null || inquiry.companyResponse!.isEmpty;
+    final requestId = int.tryParse(inquiry.id);
+    if (requestId == null) return true;
+    return !_ordersByRequestId.containsKey(requestId);
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(28, 28),
-      painter: _PersonIconPainter(),
-    );
+    return CustomPaint(size: const Size(28, 28), painter: _PersonIconPainter());
   }
-
 
   @override
   Widget build(BuildContext context) {
@@ -61,9 +71,7 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.black, width: 3.0),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 3.0)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -86,14 +94,20 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
                 padding: const EdgeInsets.only(right: 8.0),
                 child: Center(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 4,
+                    ),
                     decoration: BoxDecoration(
                       color: Colors.blue.withValues(alpha: 0.10),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
                       '${visibleInquiries.length}',
-                      style: const TextStyle(color: Colors.black87, fontSize: 14),
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontSize: 14,
+                      ),
                     ),
                   ),
                 ),
@@ -124,134 +138,130 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
           _isLoading
               ? const Center(child: CircularProgressIndicator())
               : visibleInquiries.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
+              ? Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.inbox, size: 64, color: Colors.grey),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'Нет новых заявок',
+                        style: TextStyle(fontSize: 18, color: Colors.grey),
+                      ),
+                      const SizedBox(height: 24),
+                      ElevatedButton(
+                        onPressed: _loadInquiries,
+                        child: const Text('Обновить'),
+                      ),
+                    ],
+                  ),
+                )
+              : RefreshIndicator(
+                  onRefresh: _loadInquiries,
+                  child: ListView(
+                    padding: const EdgeInsets.all(16),
+                    children: [
+                      Row(
                         children: [
-                          const Icon(Icons.inbox, size: 64, color: Colors.grey),
-                          const SizedBox(height: 16),
-                          const Text(
-                            'Нет новых заявок',
-                            style: TextStyle(fontSize: 18, color: Colors.grey),
+                          ChoiceChip(
+                            label: const Text('Новые'),
+                            selected: _showOnlyPending,
+                            onSelected: (_) =>
+                                setState(() => _showOnlyPending = true),
                           ),
-                          const SizedBox(height: 24),
-                          ElevatedButton(
-                            onPressed: _loadInquiries,
-                            child: const Text('Обновить'),
+                          const SizedBox(width: 10),
+                          ChoiceChip(
+                            label: const Text('Все'),
+                            selected: !_showOnlyPending,
+                            onSelected: (_) =>
+                                setState(() => _showOnlyPending = false),
                           ),
                         ],
                       ),
-                    )
-                  : RefreshIndicator(
-                      onRefresh: _loadInquiries,
-                      child: ListView(
-                        padding: const EdgeInsets.all(16),
-                        children: [
-                          Row(
-                            children: [
-                              ChoiceChip(
-                                label: const Text('Новые'),
-                                selected: _showOnlyPending,
-                                onSelected: (_) => setState(() => _showOnlyPending = true),
+                      const SizedBox(height: 12),
+                      ...visibleInquiries.map((inquiry) {
+                        final pending = _isPending(inquiry);
+                        return Card(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          child: ListTile(
+                            leading: Icon(
+                              pending ? Icons.markunread : Icons.done_all,
+                              color: pending ? Colors.blue : Colors.green,
+                            ),
+                            title: Text(
+                              inquiry.question.length > 50
+                                  ? '${inquiry.question.substring(0, 50)}...'
+                                  : inquiry.question,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
                               ),
-                              const SizedBox(width: 10),
-                              ChoiceChip(
-                                label: const Text('Все'),
-                                selected: !_showOnlyPending,
-                                onSelected: (_) => setState(() => _showOnlyPending = false),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...visibleInquiries.map((inquiry) {
-                            final pending = _isPending(inquiry);
-                            return Card(
-                              margin: const EdgeInsets.only(bottom: 12),
-                              child: ListTile(
-                                leading: Icon(
-                                  pending ? Icons.markunread : Icons.done_all,
-                                  color: pending ? Colors.blue : Colors.green,
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text('Категория: ${inquiry.category}'),
+                                Text('Клиент: ${inquiry.clientName}'),
+                                Text(
+                                  'Дата: ${inquiry.createdAt.day}.${inquiry.createdAt.month}.${inquiry.createdAt.year}',
                                 ),
-                                title: Text(
-                                  inquiry.question.length > 50
-                                      ? '${inquiry.question.substring(0, 50)}...'
-                                      : inquiry.question,
-                                  style: const TextStyle(fontWeight: FontWeight.bold),
-                                ),
-                                subtitle: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    Text('Категория: ${inquiry.category}'),
-                                    Text('Клиент: ${inquiry.clientName}'),
-                                    Text(
-                                      'Дата: ${inquiry.createdAt.day}.${inquiry.createdAt.month}.${inquiry.createdAt.year}',
-                                    ),
-                                    if (!pending && inquiry.companyName?.isNotEmpty == true)
-                                      Text('Ответила: ${inquiry.companyName}'),
-                                  ],
-                                ),
-                                trailing: const Icon(Icons.arrow_forward_ios, size: 16),
-                                onTap: () async {
-                                  await InquiryService.updateCurrentInquiry(inquiry);
-                                  if (!mounted) return;
-                                  
-                                  // Проверяем, есть ли подтвержденная запись
-                                  final orderingService = RemoteOrderingService();
-                                  final orders = await orderingService.getOrders();
-                                  
-                                  if (orders != null && orders.isNotEmpty) {
-                                    // Ищем заказ для этой заявки
-                                    final orderRequestId = int.tryParse(inquiry.id);
-                                    if (orderRequestId != null) {
-                                      try {
-                                        final relevantOrder = orders.firstWhere(
-                                          (order) {
-                                            final reqId = order['order_request_id'] ?? order['orderRequestId'];
-                                            return reqId != null && reqId == orderRequestId;
-                                          },
-                                        );
-                                        
-                                        // Если заказ найден и запись подтверждена
-                                        final isConfirmed = relevantOrder['is_date_confirmed'] ?? false;
-                                        final isEnrolled = relevantOrder['is_enrolled'] ?? false;
-                                        
-                                        if (isConfirmed || isEnrolled) {
-                                          // Открываем экран деталей клиента
-                                          await Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) => CompanyClientDetailScreen(
-                                                order: relevantOrder,
-                                              ),
-                                            ),
-                                          );
-                                          if (!mounted) return;
-                                          _loadInquiries();
-                                          return;
-                                        }
-                                      } catch (_) {
-                                        // Заказ не найден, продолжаем с обычным экраном
-                                      }
-                                    }
-                                  }
-                                  
-                                  // Иначе открываем обычный экран заявки
+                                if (!pending &&
+                                    inquiry.companyName?.isNotEmpty == true)
+                                  Text('Ответила: ${inquiry.companyName}'),
+                              ],
+                            ),
+                            trailing: const Icon(
+                              Icons.arrow_forward_ios,
+                              size: 16,
+                            ),
+                            onTap: () async {
+                              await InquiryService.setCurrentInquiry(inquiry);
+                              if (!mounted) return;
+
+                              final orderRequestId = int.tryParse(inquiry.id);
+                              final relevantOrder = orderRequestId == null
+                                  ? null
+                                  : _ordersByRequestId[orderRequestId];
+
+                              if (relevantOrder != null) {
+                                final isConfirmed =
+                                    relevantOrder['is_date_confirmed'] == true;
+                                final isEnrolled =
+                                    relevantOrder['is_enrolled'] == true;
+
+                                if (isConfirmed || isEnrolled) {
                                   await Navigator.push(
                                     context,
                                     MaterialPageRoute(
-                                      builder: (context) => const ClientInquiryScreen(),
+                                      builder: (context) =>
+                                          CompanyClientDetailScreen(
+                                            order: relevantOrder,
+                                          ),
                                     ),
                                   );
                                   if (!mounted) return;
                                   _loadInquiries();
-                                },
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
+                                  return;
+                                }
+                              }
+
+                              // Иначе открываем обычный экран заявки
+                              await Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const ClientInquiryScreen(),
+                                ),
+                              );
+                              if (!mounted) return;
+                              _loadInquiries();
+                            },
+                          ),
+                        );
+                      }),
+                    ],
+                  ),
+                ),
         ],
       ),
     );

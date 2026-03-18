@@ -31,10 +31,13 @@ class InquiryService {
     }
 
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Сохранить текущий запрос
-    await prefs.setString(_currentInquiryKey, jsonEncode(inquiryToStore.toJson()));
-    
+    await prefs.setString(
+      _currentInquiryKey,
+      jsonEncode(inquiryToStore.toJson()),
+    );
+
     // Сохранить в список всех запросов (только для клиентов)
     if (userType == UserType.client) {
       final inquiriesJson = prefs.getStringList(_inquiriesKey) ?? [];
@@ -47,9 +50,9 @@ class InquiryService {
   static Future<InquiryModel?> getCurrentInquiry() async {
     final prefs = await SharedPreferences.getInstance();
     final inquiryJson = prefs.getString(_currentInquiryKey);
-    
+
     if (inquiryJson == null) return null;
-    
+
     try {
       return InquiryModel.fromJson(jsonDecode(inquiryJson));
     } catch (e) {
@@ -57,72 +60,13 @@ class InquiryService {
     }
   }
 
-  // Обновить текущий запрос
-  static Future<void> updateCurrentInquiry(InquiryModel inquiry) async {
+  // Установить текущий запрос без побочных действий (без отправки на сервер)
+  static Future<void> setCurrentInquiry(InquiryModel inquiry) async {
     final userType = await AuthService.getUserType();
     final prefs = await SharedPreferences.getInstance();
-    
-    // Для компаний отправляем ответ на сервер через RemoteOrderingService
-    if (ApiConfig.isConfigured && userType == UserType.company) {
-      final orderRequestId = int.tryParse(inquiry.id);
-      if (orderRequestId != null) {
-        // Получаем заявку с сервера, чтобы узнать client_id
-        final orderRequest = await _remoteClient.getOrderRequest(orderRequestId);
-        if (orderRequest != null) {
-          final clientId = (orderRequest['client_id'] ?? orderRequest['clientId'])?.toString();
-          if (clientId != null) {
-            // Парсим дату записи, если указана
-            DateTime? enrollmentDate;
-            if (inquiry.appointmentDate != null && inquiry.appointmentTime != null) {
-              try {
-                final dateParts = inquiry.appointmentDate!.split('.');
-                final timeParts = inquiry.appointmentTime!.split(':');
-                if (dateParts.length == 3 && timeParts.length == 2) {
-                  enrollmentDate = DateTime(
-                    int.parse(dateParts[2]),
-                    int.parse(dateParts[1]),
-                    int.parse(dateParts[0]),
-                    int.parse(timeParts[0]),
-                    int.parse(timeParts[1]),
-                  );
-                }
-              } catch (_) {
-                // Если не удалось распарсить дату, оставляем null
-              }
-            }
-            
-            // Парсим цену, срок и предоплату
-            int? price;
-            int? deadline;
-            int? prepayment;
-            
-            if (inquiry.price != null && inquiry.price!.isNotEmpty) {
-              price = int.tryParse(inquiry.price!.replaceAll(RegExp(r'[^\d]'), ''));
-            }
-            if (inquiry.time != null && inquiry.time!.isNotEmpty) {
-              deadline = int.tryParse(inquiry.time!.replaceAll(RegExp(r'[^\d]'), ''));
-            }
-            
-            // Отправляем заказ на сервер
-            await _remoteOrdering.createOrder(
-              receiverId: clientId,
-              orderRequestId: orderRequestId,
-              price: price,
-              deadline: deadline,
-              enrollmentDate: enrollmentDate,
-              prepayment: prepayment,
-            );
-          }
-        }
-      }
-    } else if (ApiConfig.isConfigured && userType == UserType.client) {
-      // Для клиентов обновляем заявку на сервере (если нужно)
-      await _remoteInquiry.updateInquiry(inquiry);
-    }
 
-    // Сохраняем локально
     await prefs.setString(_currentInquiryKey, jsonEncode(inquiry.toJson()));
-    
+
     // Обновить в списке (только для клиентов)
     if (userType == UserType.client) {
       final inquiriesJson = prefs.getStringList(_inquiriesKey) ?? [];
@@ -137,59 +81,178 @@ class InquiryService {
     }
   }
 
+  // Обновить текущий запрос
+  static Future<void> updateCurrentInquiry(InquiryModel inquiry) async {
+    final userType = await AuthService.getUserType();
+
+    // Для компаний отправляем ответ на сервер через RemoteOrderingService
+    if (ApiConfig.isConfigured && userType == UserType.company) {
+      final orderRequestId = int.tryParse(inquiry.id);
+      if (orderRequestId == null) {
+        throw StateError('Неверный идентификатор заявки');
+      }
+
+      // Получаем заявку с сервера, чтобы узнать корректный client GUID
+      final orderRequest = await _remoteClient.getOrderRequest(orderRequestId);
+      if (orderRequest == null) {
+        throw StateError('Не удалось получить заявку клиента');
+      }
+
+      final clientId =
+          (orderRequest['client_guid'] ??
+                  orderRequest['clientGuid'] ??
+                  orderRequest['client_id'] ??
+                  orderRequest['clientId'])
+              ?.toString();
+      if (clientId == null || clientId.isEmpty) {
+        throw StateError('Не удалось определить получателя отклика');
+      }
+
+      // Парсим дату записи, если указана
+      DateTime? enrollmentDate;
+      if (inquiry.appointmentDate != null && inquiry.appointmentTime != null) {
+        try {
+          final dateParts = inquiry.appointmentDate!.split('.');
+          final timeParts = inquiry.appointmentTime!.split(':');
+          if (dateParts.length == 3 && timeParts.length == 2) {
+            enrollmentDate = DateTime(
+              int.parse(dateParts[2]),
+              int.parse(dateParts[1]),
+              int.parse(dateParts[0]),
+              int.parse(timeParts[0]),
+              int.parse(timeParts[1]),
+            );
+          }
+        } catch (_) {
+          // Если не удалось распарсить дату, оставляем null
+        }
+      }
+
+      // Парсим цену, срок и предоплату
+      int? price;
+      int? deadline;
+      int? prepayment;
+      final responseText = inquiry.companyResponse?.trim();
+      final specialistName = inquiry.specialistName?.trim();
+      final specialistPhone = inquiry.specialistPhone?.trim();
+
+      if (inquiry.price != null && inquiry.price!.isNotEmpty) {
+        price = int.tryParse(inquiry.price!.replaceAll(RegExp(r'[^\d]'), ''));
+      }
+      if (inquiry.time != null && inquiry.time!.isNotEmpty) {
+        deadline = int.tryParse(inquiry.time!.replaceAll(RegExp(r'[^\d]'), ''));
+      }
+      if (inquiry.prepayment != null && inquiry.prepayment!.isNotEmpty) {
+        prepayment = int.tryParse(
+          inquiry.prepayment!.replaceAll(RegExp(r'[^\d]'), ''),
+        );
+      }
+
+      // Отправляем заказ на сервер
+      final createdOrder = await _remoteOrdering.createOrder(
+        receiverId: clientId,
+        orderRequestId: orderRequestId,
+        price: price,
+        deadline: deadline,
+        enrollmentDate: enrollmentDate,
+        prepayment: prepayment,
+        responseText: responseText != null && responseText.isNotEmpty
+            ? responseText
+            : null,
+        specialistName: specialistName != null && specialistName.isNotEmpty
+            ? specialistName
+            : null,
+        specialistPhone: specialistPhone != null && specialistPhone.isNotEmpty
+            ? specialistPhone
+            : null,
+        throwOnError: true,
+      );
+      if (createdOrder == null) {
+        throw StateError('Сервер не подтвердил создание отклика');
+      }
+    } else if (ApiConfig.isConfigured && userType == UserType.client) {
+      // Для клиентов обновляем заявку на сервере (если нужно)
+      await _remoteInquiry.updateInquiry(inquiry);
+    }
+
+    await setCurrentInquiry(inquiry);
+  }
+
   // Получить все запросы
   static Future<List<InquiryModel>> getAllInquiries() async {
     final userType = await AuthService.getUserType();
-    
+
     // Для компаний получаем заявки с сервера через новый endpoint
     if (ApiConfig.isConfigured && userType == UserType.company) {
       // Получаем категории компании для фильтрации
       final companyProfile = await _remoteCompany.getCompanyProfile();
       List<int>? companyCategories;
       if (companyProfile != null) {
-        final categories = companyProfile['categories_id'] ?? companyProfile['categoriesId'];
+        final categories =
+            companyProfile['categories_id'] ?? companyProfile['categoriesId'];
         if (categories is List) {
-          companyCategories = categories.map((e) => (e as num).toInt()).toList();
+          companyCategories = categories
+              .map((e) => (e as num).toInt())
+              .toList();
         }
       }
-      
+
       // Используем новый endpoint компании с фильтрацией по категориям и радиусу
       final orderRequests = await _remoteCompany.getOrderRequests(
         categoriesId: companyCategories,
       );
-      
+
       if (orderRequests != null && orderRequests.isNotEmpty) {
         return orderRequests.map((request) {
-          final id = (request['id'] ?? request['orderRequestId'])?.toString() ?? '';
-          final categoryId = (request['category_id'] ?? request['categoryId'] as num?)?.toInt() ?? 1;
+          final id =
+              (request['id'] ?? request['orderRequestId'])?.toString() ?? '';
+          final categoryId =
+              (request['category_id'] ?? request['categoryId'] as num?)
+                  ?.toInt() ??
+              1;
           final description = (request['description'] as String?) ?? '';
-          final clientId = (request['client_id'] ?? request['clientId'])?.toString() ?? '';
-          final toKnowPrice = (request['to_know_price']?.toString() ?? 'false') == 'true';
-          final toKnowDeadline = (request['to_know_deadline']?.toString() ?? 'false') == 'true';
-          final toKnowEnroll = (request['to_know_enrollment_date']?.toString() ?? 'false') == 'true';
-          
+          final clientId =
+              (request['client_guid'] ??
+                      request['clientGuid'] ??
+                      request['client_id'] ??
+                      request['clientId'])
+                  ?.toString() ??
+              '';
+          final toKnowPrice =
+              (request['to_know_price']?.toString() ?? 'false') == 'true';
+          final toKnowDeadline =
+              (request['to_know_deadline']?.toString() ?? 'false') == 'true';
+          final toKnowSpecialist =
+              (request['to_know_specialist']?.toString() ?? 'false') == 'true';
+          final toKnowEnroll =
+              (request['to_know_enrollment_date']?.toString() ?? 'false') ==
+              'true';
+
           // Получаем имя клиента из вложенного объекта или используем ID
           String clientName = clientId;
           if (request['client'] is Map<String, dynamic>) {
             final client = request['client'] as Map<String, dynamic>;
             clientName = (client['name'] as String?) ?? clientId;
           }
-          
+
           return InquiryModel(
-            id: id.isEmpty ? DateTime.now().millisecondsSinceEpoch.toString() : id,
+            id: id.isEmpty
+                ? DateTime.now().millisecondsSinceEpoch.toString()
+                : id,
             question: description,
             category: categoryIdToTitle(categoryId),
             clientName: clientName,
             createdAt: DateTime.now(), // TODO: получить из API если доступно
             wantsPrice: toKnowPrice,
             wantsTime: toKnowDeadline,
+            wantsSpecialist: toKnowSpecialist,
             wantsAppointmentTime: toKnowEnroll,
           );
         }).toList();
       }
       return [];
     }
-    
+
     // Для клиентов получаем заявки с сервера или из локального хранилища
     if (ApiConfig.isConfigured && userType == UserType.client) {
       final remoteInquiries = await _remoteInquiry.getAllInquiries();
@@ -201,14 +264,17 @@ class InquiryService {
     // Fallback на локальное хранилище
     final prefs = await SharedPreferences.getInstance();
     final inquiriesJson = prefs.getStringList(_inquiriesKey) ?? [];
-    
-    return inquiriesJson.map((json) {
-      try {
-        return InquiryModel.fromJson(jsonDecode(json));
-      } catch (e) {
-        return null;
-      }
-    }).whereType<InquiryModel>().toList();
+
+    return inquiriesJson
+        .map((json) {
+          try {
+            return InquiryModel.fromJson(jsonDecode(json));
+          } catch (e) {
+            return null;
+          }
+        })
+        .whereType<InquiryModel>()
+        .toList();
   }
 
   // Удалить текущий запрос

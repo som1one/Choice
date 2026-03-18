@@ -14,6 +14,7 @@ class InquiryModel {
   final String? companyResponse;
   final String? companyName;
   final String? price;
+  final String? prepayment;
   final String? time;
   final String? specialistName;
   final String? specialistPhone;
@@ -47,6 +48,7 @@ class InquiryModel {
     this.companyResponse,
     this.companyName,
     this.price,
+    this.prepayment,
     this.time,
     this.specialistName,
     this.specialistPhone,
@@ -78,6 +80,7 @@ class InquiryModel {
       'companyResponse': companyResponse,
       'companyName': companyName,
       'price': price,
+      'prepayment': prepayment,
       'time': time,
       'specialistName': specialistName,
       'specialistPhone': specialistPhone,
@@ -110,6 +113,7 @@ class InquiryModel {
       companyResponse: json['companyResponse'] as String?,
       companyName: json['companyName'] as String?,
       price: json['price'] as String?,
+      prepayment: json['prepayment'] as String?,
       time: json['time'] as String?,
       specialistName: json['specialistName'] as String?,
       specialistPhone: json['specialistPhone'] as String?,
@@ -141,6 +145,7 @@ class InquiryModel {
     String? companyResponse,
     String? companyName,
     String? price,
+    String? prepayment,
     String? time,
     String? specialistName,
     String? specialistPhone,
@@ -170,6 +175,7 @@ class InquiryModel {
       companyResponse: companyResponse ?? this.companyResponse,
       companyName: companyName ?? this.companyName,
       price: price ?? this.price,
+      prepayment: prepayment ?? this.prepayment,
       time: time ?? this.time,
       specialistName: specialistName ?? this.specialistName,
       specialistPhone: specialistPhone ?? this.specialistPhone,

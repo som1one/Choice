@@ -61,6 +61,8 @@ class RemoteReviewService {
         return await orderingService.canAddReview(
           clientId: currentUserId,
           companyId: guid,
+          reviewerId: currentUserId,
+          reserve: false,
         );
       }
       // Для компаний: проверяем возможность оставить отзыв клиенту
@@ -68,6 +70,8 @@ class RemoteReviewService {
         return await orderingService.canAddReview(
           clientId: guid,
           companyId: currentUserId,
+          reviewerId: currentUserId,
+          reserve: false,
         );
       }
       

@@ -7,8 +7,33 @@ from ..models import Order, OrderStatus
 from ..schemas import OrderResponse, CreateOrderRequest, ChangeEnrollmentDateRequest
 from ..repositories import OrderRepository
 from datetime import datetime
+from services.client_service.models import Client
+from services.company_service.models import Company
+import uuid
 
 router = APIRouter(prefix="/api/order", tags=["order"])
+
+
+def _parse_uuid(value: str | None) -> uuid.UUID | None:
+    if not value:
+        return None
+    try:
+        return uuid.UUID(str(value))
+    except Exception:
+        return None
+
+
+def _normalize_order(order: Order) -> Order:
+    """Нормализует старые записи заказа, чтобы response_model не падал."""
+    if order.reviews is None:
+        order.reviews = []
+    if order.is_enrolled is None:
+        order.is_enrolled = False
+    if order.is_date_confirmed is None:
+        order.is_date_confirmed = True
+    if order.status is None:
+        order.status = OrderStatus.ACTIVE.value
+    return order
 
 @router.post("/create", response_model=OrderResponse)
 async def create_order(
@@ -31,18 +56,60 @@ async def create_order(
     # Проверка, нет ли уже заказа
     existing = await repo.get_by_request_and_company(request.order_request_id, company_id)
     if existing:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Order already exists"
-        )
+        # Повторный отклик по той же заявке трактуем как обновление существующего заказа
+        if request.price is not None:
+            existing.price = request.price
+        if request.prepayment is not None:
+            existing.prepayment = request.prepayment
+        if request.deadline is not None:
+            existing.deadline = request.deadline
+        if request.response_text is not None:
+            existing.response_text = request.response_text
+        if request.specialist_name is not None:
+            existing.specialist_name = request.specialist_name
+        if request.specialist_phone is not None:
+            existing.specialist_phone = request.specialist_phone
+        if request.enrollment_date is not None:
+            existing.enrollment_date = request.enrollment_date
+
+        updated = await repo.update(existing)
+        if not updated:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to update existing order"
+            )
+        return _normalize_order(existing)
     
+    # receiver_id может прийти как GUID клиента или как внутренний numeric client_id
+    normalized_receiver_id = str(request.receiver_id).strip()
+    try:
+        uuid.UUID(normalized_receiver_id)
+    except Exception:
+        # Пытаемся трактовать receiver_id как внутренний ID клиента и преобразовать в GUID
+        if normalized_receiver_id.isdigit():
+            client_row = db.query(Client).filter(Client.id == int(normalized_receiver_id)).first()
+            if not client_row:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Receiver client not found"
+                )
+            normalized_receiver_id = str(client_row.guid)
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="receiver_id must be client guid or numeric client id"
+            )
+
     order = Order(
         order_request_id=request.order_request_id,
         company_id=company_id,
-        client_id=request.receiver_id,
+        client_id=normalized_receiver_id,
         price=request.price or 0,
         prepayment=request.prepayment or 0,
         deadline=request.deadline or 0,
+        response_text=request.response_text,
+        specialist_name=request.specialist_name,
+        specialist_phone=request.specialist_phone,
         enrollment_date=request.enrollment_date,
         status=OrderStatus.ACTIVE.value
     )
@@ -57,7 +124,8 @@ async def create_order(
         from common.push_notification_service import send_push_notification
         from services.authentication.models import User
         
-        client = db.query(User).filter(User.id == request.receiver_id).first()
+        client_uuid = _parse_uuid(normalized_receiver_id)
+        client = db.query(User).filter(User.id == client_uuid).first() if client_uuid else None
         if client and client.device_token:
             # Получаем название компании
             from services.company_service.models import Company
@@ -94,7 +162,7 @@ async def create_order(
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to publish OrderCreatedEvent: {e}")
     
-    return order
+    return _normalize_order(order)
 
 @router.get("/get", response_model=list[OrderResponse])
 async def get_orders(
@@ -114,28 +182,30 @@ async def get_orders(
         # Фильтруем по типу пользователя
         if user_type == "Client":
             # Для клиентов - только заказы, где клиент - это текущий пользователь
-            orders = [o for o in orders if o.client_id == user_id]
+            user_id_str = str(user_id)
+            orders = [o for o in orders if str(o.client_id) == user_id_str]
         elif user_type == "Company":
             # Для компаний - только заказы, где компания - это текущий пользователь
-            orders = [o for o in orders if o.company_id == user_id]
+            user_id_str = str(user_id)
+            orders = [o for o in orders if str(o.company_id) == user_id_str]
         else:
             # Для других типов - пустой список
             orders = []
         
-        return orders
+        return [_normalize_order(order) for order in orders]
     
     # Иначе возвращаем все заказы пользователя с явной фильтрацией по типу
     if user_type == "Client":
         # Для клиентов - только заказы, где клиент - это текущий пользователь
-        orders = db.query(Order).filter(Order.client_id == user_id).all()
+        orders = db.query(Order).filter(Order.client_id == str(user_id)).all()
     elif user_type == "Company":
         # Для компаний - только заказы, где компания - это текущий пользователь
-        orders = db.query(Order).filter(Order.company_id == user_id).all()
+        orders = db.query(Order).filter(Order.company_id == str(user_id)).all()
     else:
         # Для других типов - пустой список
         orders = []
     
-    return orders
+    return [_normalize_order(order) for order in orders]
 
 @router.put("/enroll", response_model=OrderResponse)
 async def enroll(
@@ -226,7 +296,7 @@ async def enroll(
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to publish UserEnrolledEvent: {e}")
     
-    return order
+    return _normalize_order(order)
 
 @router.put("/confirmEnrollmentDate", response_model=OrderResponse)
 async def confirm_enrollment_date(
@@ -291,7 +361,7 @@ async def confirm_enrollment_date(
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to publish OrderEnrollmentDateConfirmedEvent: {e}")
     
-    return order
+    return _normalize_order(order)
 
 @router.put("/changeOrderEnrollmentDate", response_model=OrderResponse)
 async def change_enrollment_date(
@@ -359,7 +429,7 @@ async def change_enrollment_date(
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to publish OrderEnrollmentDateChangedEvent: {e}")
     
-    return order
+    return _normalize_order(order)
 
 @router.put("/finishOrder", response_model=OrderResponse)
 async def finish_order(
@@ -426,7 +496,7 @@ async def finish_order(
         logger = logging.getLogger(__name__)
         logger.warning(f"Failed to publish OrderStatusChangedEvent: {e}")
     
-    return order
+    return _normalize_order(order)
 
 @router.put("/cancelEnrollment", response_model=OrderResponse)
 async def cancel_enrollment(
@@ -454,32 +524,63 @@ async def cancel_enrollment(
             detail="Failed to cancel enrollment"
         )
     
-    return order
+    return _normalize_order(order)
 
 @router.put("/addReview")
 async def add_review(
     client_id: str,
     company_id: str,
+    reviewer_id: str | None = None,
+    reserve: bool = True,
     db: Session = Depends(get_db)
 ):
     """Проверка и добавление возможности оставить отзыв (используется Review Service)"""
     repo = OrderRepository(db)
+
+    # Backward compatibility: client_id/company_id могут приходить как внутренние numeric id
+    normalized_client_id = str(client_id).strip()
+    try:
+        uuid.UUID(normalized_client_id)
+    except Exception:
+        if normalized_client_id.isdigit():
+            client_row = db.query(Client).filter(Client.id == int(normalized_client_id)).first()
+            if client_row:
+                normalized_client_id = str(client_row.guid)
+
+    normalized_company_id = str(company_id).strip()
+    try:
+        uuid.UUID(normalized_company_id)
+    except Exception:
+        if normalized_company_id.isdigit():
+            company_row = db.query(Company).filter(Company.id == int(normalized_company_id)).first()
+            if company_row:
+                normalized_company_id = str(company_row.guid)
+
+    reviewer_marker = reviewer_id or normalized_client_id
     
     # Ищем завершенный заказ между клиентом и компанией
-    orders = await repo.get_by_users(client_id, company_id)
+    orders = await repo.get_by_users(normalized_client_id, normalized_company_id)
     
     for order in orders:
-        # Проверяем, что заказ завершен и отзыв еще не оставлен
+        # Проверяем, что заказ завершен
         if order.status == OrderStatus.FINISHED.value:
-            if not order.reviews or client_id not in order.reviews:
-                # Добавляем ID клиента в список отзывов (как маркер, что отзыв можно оставить)
-                if not order.reviews:
-                    order.reviews = []
-                if client_id not in order.reviews:
-                    order.reviews.append(client_id)
-                    result = await repo.update(order)
-                    if result:
-                        return {"success": True, "message": "Review can be added"}
+            if not order.reviews:
+                order.reviews = []
+
+            already_left = reviewer_marker in order.reviews
+            if already_left:
+                return {"success": False, "message": "Review already added"}
+
+            # Режим reserve=true: резервируем право отзыва (используется review-service)
+            if reserve:
+                order.reviews.append(reviewer_marker)
+                result = await repo.update(order)
+                if result:
+                    return {"success": True, "message": "Review can be added"}
+                return {"success": False, "message": "Failed to reserve review"}
+
+            # Режим reserve=false: только проверка (используется frontend)
+            return {"success": True, "message": "Review can be added"}
     
     return {"success": False, "message": "No finished order found or review already added"}
 

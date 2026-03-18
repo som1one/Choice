@@ -1,12 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
 import '../services/remote_chat_service.dart';
 import '../services/websocket_chat_service.dart';
 import '../services/api_config.dart';
 import '../services/auth_token_store.dart';
 import '../services/auth_service.dart';
-import '../services/remote_file_service.dart';
 import '../services/remote_review_service.dart';
 import 'image_viewer_screen.dart';
 import 'dart:convert';
@@ -31,7 +29,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final RemoteChatService _chatService = RemoteChatService();
   final WebSocketChatService _wsService = WebSocketChatService();
-  final RemoteFileService _fileService = RemoteFileService();
   final RemoteReviewService _reviewService = RemoteReviewService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
@@ -41,7 +38,6 @@ class _ChatScreenState extends State<ChatScreen> {
   bool _isLoading = true;
   bool _isSending = false;
   bool _isSendingImage = false;
-  bool _wsConnected = false;
   String? _currentUserId;
   UserType? _userType;
 
@@ -122,16 +118,22 @@ class _ChatScreenState extends State<ChatScreen> {
       // Подписываемся на новые сообщения
       _wsService.onMessage((message) {
         if (!mounted) return;
-        
-        final receiverId = (message['receiver_id'] ?? message['receiverId'])?.toString();
-        final senderId = (message['sender_id'] ?? message['senderId'])?.toString();
+
+        final receiverId = (message['receiver_id'] ?? message['receiverId'])
+            ?.toString();
+        final senderId = (message['sender_id'] ?? message['senderId'])
+            ?.toString();
         final currentUserIdStr = _currentUserId?.toString();
         final widgetUserIdStr = widget.userId.toString();
-        
+
         // Добавляем сообщение только если оно для текущего чата
         // Сравниваем как строки, так как это могут быть UUID
-        if ((receiverId != null && (receiverId == currentUserIdStr || receiverId == widgetUserIdStr)) ||
-            (senderId != null && (senderId == currentUserIdStr || senderId == widgetUserIdStr))) {
+        if ((receiverId != null &&
+                (receiverId == currentUserIdStr ||
+                    receiverId == widgetUserIdStr)) ||
+            (senderId != null &&
+                (senderId == currentUserIdStr ||
+                    senderId == widgetUserIdStr))) {
           setState(() {
             // Проверяем, нет ли уже такого сообщения (по ID)
             final messageId = message['id'];
@@ -151,12 +153,12 @@ class _ChatScreenState extends State<ChatScreen> {
       // Подписываемся на события заказов (enrollmentDateChanged, enrolled, confirmed, statusChanged)
       _wsService.onOrderEvent((orderEvent) {
         if (!mounted) return;
-        
+
         final eventType = orderEvent['type'] as String?;
         final orderId = orderEvent['order_id'] ?? orderEvent['orderId'];
         final clientId = orderEvent['client_id'] ?? orderEvent['clientId'];
         final companyId = orderEvent['company_id'] ?? orderEvent['companyId'];
-        
+
         // Проверяем, относится ли событие к текущему чату
         if (clientId == widget.userId || companyId == widget.userId) {
           // Обновляем сообщения, связанные с заказом
@@ -165,31 +167,33 @@ class _ChatScreenState extends State<ChatScreen> {
             for (int i = 0; i < _messages.length; i++) {
               final msg = _messages[i];
               final body = msg['body'] ?? msg['text'];
-              
+
               // Если сообщение содержит JSON с OrderId, обновляем его
               if (body != null) {
                 try {
                   final bodyJson = jsonDecode(body.toString());
-                  final msgOrderId = bodyJson['OrderId'] ?? bodyJson['order_id'] ?? bodyJson['orderId'];
-                  
+                  final msgOrderId =
+                      bodyJson['OrderId'] ??
+                      bodyJson['order_id'] ??
+                      bodyJson['orderId'];
+
                   if (msgOrderId == orderId) {
                     // Обновляем данные заказа в сообщении
                     if (eventType == 'enrollmentDateChanged') {
-                      bodyJson['EnrollmentDate'] = orderEvent['enrollment_date'] ?? 
-                                                   orderEvent['enrollmentDate'];
+                      bodyJson['EnrollmentDate'] =
+                          orderEvent['enrollment_date'] ??
+                          orderEvent['enrollmentDate'];
                       bodyJson['IsDateConfirmed'] = false;
                     } else if (eventType == 'enrolled') {
                       bodyJson['IsEnrolled'] = true;
                     } else if (eventType == 'confirmed') {
                       bodyJson['IsDateConfirmed'] = true;
                     } else if (eventType == 'statusChanged') {
-                      bodyJson['Status'] = orderEvent['status'] ?? orderEvent['Status'];
+                      bodyJson['Status'] =
+                          orderEvent['status'] ?? orderEvent['Status'];
                     }
-                    
-                    _messages[i] = {
-                      ...msg,
-                      'body': jsonEncode(bodyJson),
-                    };
+
+                    _messages[i] = {...msg, 'body': jsonEncode(bodyJson)};
                   }
                 } catch (_) {
                   // Если не удалось распарсить, пропускаем
@@ -201,19 +205,10 @@ class _ChatScreenState extends State<ChatScreen> {
       });
 
       // Подключаемся к WebSocket
-      final connected = await _wsService.connect();
-      if (mounted) {
-        setState(() {
-          _wsConnected = connected;
-        });
-      }
+      await _wsService.connect();
     } catch (e) {
       // Если WebSocket недоступен, продолжаем работу через REST API
-      if (mounted) {
-        setState(() {
-          _wsConnected = false;
-        });
-      }
+      // Игнорируем, чат продолжит работать через REST.
     }
   }
 
@@ -304,13 +299,20 @@ class _ChatScreenState extends State<ChatScreen> {
           // Добавляем отправленное сообщение в список
           // (оно также придет через WebSocket, но мы добавим его сразу для оптимистичного обновления)
           final messageId = result['id'];
-          final exists = messageId != null && _messages.any((m) => m['id'] == messageId);
+          final exists =
+              messageId != null && _messages.any((m) => m['id'] == messageId);
           if (!exists) {
             _messages.add(result);
           }
           _messageController.clear();
         });
         _scrollToBottom();
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Сообщение не отправлено: ошибка сервера'),
+          ),
+        );
       }
     } catch (e) {
       // Ошибка отправки - показываем уведомление
@@ -347,7 +349,8 @@ class _ChatScreenState extends State<ChatScreen> {
       if (result != null) {
         setState(() {
           final messageId = result['id'];
-          final exists = messageId != null && _messages.any((m) => m['id'] == messageId);
+          final exists =
+              messageId != null && _messages.any((m) => m['id'] == messageId);
           if (!exists) {
             _messages.add(result);
           }
@@ -406,9 +409,9 @@ class _ChatScreenState extends State<ChatScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Ошибка отправки отзыва')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Ошибка отправки отзыва')));
       }
     }
   }
@@ -492,10 +495,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                widget.userName,
-                overflow: TextOverflow.ellipsis,
-              ),
+              child: Text(widget.userName, overflow: TextOverflow.ellipsis),
             ),
           ],
         ),
@@ -509,122 +509,144 @@ class _ChatScreenState extends State<ChatScreen> {
             child: _isLoading
                 ? const Center(child: CircularProgressIndicator())
                 : _messages.isEmpty
-                    ? const Center(child: Text('Нет сообщений'))
-                    : ListView.builder(
-                        controller: _scrollController,
-                        padding: const EdgeInsets.all(16),
-                        itemCount: _messages.length,
-                        itemBuilder: (context, index) {
-                          final msg = _messages[index];
-                          final messageType = msg['message_type'] ?? msg['messageType'];
-                          final text = msg['text'] ?? msg['body'] ?? msg['message'] ?? '';
-                          
-                          // Определяем, наше ли это сообщение
-                          // Сравниваем как строки, так как это могут быть UUID
-                          final senderId = (msg['sender_id'] ?? msg['senderId'])?.toString();
-                          final currentUserIdStr = _currentUserId?.toString();
-                          final isMine = currentUserIdStr != null && 
-                              senderId != null && 
-                              senderId == currentUserIdStr ||
-                              msg['is_mine'] == true || 
-                              msg['isMine'] == true;
+                ? const Center(child: Text('Нет сообщений'))
+                : ListView.builder(
+                    controller: _scrollController,
+                    padding: const EdgeInsets.all(16),
+                    itemCount: _messages.length,
+                    itemBuilder: (context, index) {
+                      final msg = _messages[index];
+                      final messageType =
+                          msg['message_type'] ?? msg['messageType'];
+                      final text =
+                          msg['text'] ?? msg['body'] ?? msg['message'] ?? '';
 
-                          // Проверяем, является ли сообщение изображением
-                          if (messageType == 'IMAGE' || messageType == 2) {
-                            final imageUri = text.toString();
-                            return Align(
-                              alignment: isMine
-                                  ? Alignment.centerRight
-                                  : Alignment.centerLeft,
-                              child: GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => ImageViewerScreen(
-                                        imageUrls: [imageUri],
-                                        initialIndex: 0,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  constraints: const BoxConstraints(
-                                    maxWidth: 250,
-                                    maxHeight: 300,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: isMine
-                                          ? const Color(0xFF87CEEB)
-                                          : Colors.grey.shade300,
-                                      width: 1,
-                                    ),
-                                  ),
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: Image.network(
-                                      imageUri,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stackTrace) {
-                                        return Container(
-                                          padding: const EdgeInsets.all(16),
-                                          child: const Icon(Icons.broken_image),
-                                        );
-                                      },
-                                      loadingBuilder: (context, child, loadingProgress) {
-                                        if (loadingProgress == null) return child;
-                                        return Container(
-                                          padding: const EdgeInsets.all(16),
-                                          child: const CircularProgressIndicator(),
-                                        );
-                                      },
-                                    ),
+                      // Определяем, наше ли это сообщение
+                      // Сравниваем как строки, так как это могут быть UUID
+                      final senderId = (msg['sender_id'] ?? msg['senderId'])
+                          ?.toString();
+                      final currentUserIdStr = _currentUserId?.toString();
+                      final isMineBySender =
+                          currentUserIdStr != null &&
+                          senderId != null &&
+                          senderId == currentUserIdStr;
+                      final isMine =
+                          isMineBySender ||
+                          msg['is_mine'] == true ||
+                          msg['isMine'] == true;
+
+                      // Проверяем, является ли сообщение изображением
+                      final messageTypeNormalized = messageType
+                          ?.toString()
+                          .toLowerCase();
+                      final isImageMessage =
+                          messageType == 2 ||
+                          messageTypeNormalized == 'image' ||
+                          messageTypeNormalized == '2';
+
+                      if (isImageMessage) {
+                        final imageUri = text.toString();
+                        return Align(
+                          alignment: isMine
+                              ? Alignment.centerRight
+                              : Alignment.centerLeft,
+                          child: GestureDetector(
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ImageViewerScreen(
+                                    imageUrls: [imageUri],
+                                    initialIndex: 0,
                                   ),
                                 ),
-                              ),
-                            );
-                          }
-
-                          // Проверяем, является ли сообщение заказом
-                          try {
-                            final bodyJson = jsonDecode(text.toString());
-                            if (bodyJson is Map && bodyJson.containsKey('OrderId')) {
-                              return _buildOrderMessage(msg, Map<String, dynamic>.from(bodyJson), isMine);
-                            }
-                          } catch (_) {
-                            // Не заказ, обычное текстовое сообщение
-                          }
-
-                          // Обычное текстовое сообщение
-                          return Align(
-                            alignment: isMine
-                                ? Alignment.centerRight
-                                : Alignment.centerLeft,
+                              );
+                            },
                             child: Container(
                               margin: const EdgeInsets.symmetric(vertical: 4),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 8,
+                              constraints: const BoxConstraints(
+                                maxWidth: 250,
+                                maxHeight: 300,
                               ),
                               decoration: BoxDecoration(
-                                color: isMine
-                                    ? const Color(0xFF87CEEB)
-                                    : Colors.grey.shade200,
                                 borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: isMine
+                                      ? const Color(0xFF87CEEB)
+                                      : Colors.grey.shade300,
+                                  width: 1,
+                                ),
                               ),
-                              child: Text(
-                                text.toString(),
-                                style: TextStyle(
-                                  color: isMine ? Colors.white : Colors.black87,
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  imageUri,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Container(
+                                      padding: const EdgeInsets.all(16),
+                                      child: const Icon(Icons.broken_image),
+                                    );
+                                  },
+                                  loadingBuilder:
+                                      (context, child, loadingProgress) {
+                                        if (loadingProgress == null)
+                                          return child;
+                                        return Container(
+                                          padding: const EdgeInsets.all(16),
+                                          child:
+                                              const CircularProgressIndicator(),
+                                        );
+                                      },
                                 ),
                               ),
                             ),
+                          ),
+                        );
+                      }
+
+                      // Проверяем, является ли сообщение заказом
+                      try {
+                        final bodyJson = jsonDecode(text.toString());
+                        if (bodyJson is Map &&
+                            bodyJson.containsKey('OrderId')) {
+                          return _buildOrderMessage(
+                            msg,
+                            Map<String, dynamic>.from(bodyJson),
+                            isMine,
                           );
-                        },
-                      ),
+                        }
+                      } catch (_) {
+                        // Не заказ, обычное текстовое сообщение
+                      }
+
+                      // Обычное текстовое сообщение
+                      return Align(
+                        alignment: isMine
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        child: Container(
+                          margin: const EdgeInsets.symmetric(vertical: 4),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isMine
+                                ? const Color(0xFF87CEEB)
+                                : Colors.grey.shade200,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            text.toString(),
+                            style: TextStyle(
+                              color: isMine ? Colors.white : Colors.black87,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
           ),
           const Divider(height: 1),
           SafeArea(
@@ -670,7 +692,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
-      floatingActionButton: _userType == UserType.client
+      floatingActionButton:
+          (_userType == UserType.client || _userType == UserType.company)
           ? FutureBuilder<bool>(
               future: _reviewService.canSendReview(widget.userId),
               builder: (context, snapshot) {
@@ -698,10 +721,13 @@ class _ChatScreenState extends State<ChatScreen> {
     final orderId = orderData['OrderId'] ?? orderData['order_id'];
     final price = orderData['Price'] ?? orderData['price'] ?? 0;
     final deadline = orderData['Deadline'] ?? orderData['deadline'] ?? 0;
-    final enrollmentTime = orderData['EnrollmentTime'] ?? orderData['enrollment_time'];
-    final isEnrolled = orderData['IsEnrolled'] ?? orderData['is_enrolled'] ?? false;
+    final enrollmentTime =
+        orderData['EnrollmentTime'] ?? orderData['enrollment_time'];
+    final isEnrolled =
+        orderData['IsEnrolled'] ?? orderData['is_enrolled'] ?? false;
     final status = orderData['Status'] ?? orderData['status'] ?? 1;
-    final isDateConfirmed = orderData['IsDateConfirmed'] ?? orderData['is_date_confirmed'] ?? true;
+    final isDateConfirmed =
+        orderData['IsDateConfirmed'] ?? orderData['is_date_confirmed'] ?? true;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,
@@ -712,10 +738,7 @@ class _ChatScreenState extends State<ChatScreen> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: const Color(0xFFB5CADD),
-            width: 1,
-          ),
+          border: Border.all(color: const Color(0xFFB5CADD), width: 1),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -813,4 +836,3 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 }
-

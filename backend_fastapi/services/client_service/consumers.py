@@ -202,6 +202,53 @@ async def handle_user_deleted(event_data: dict):
     except Exception as e:
         logger.error(f"Error handling UserDeletedEvent: {e}")
 
+async def handle_review_left(event_data: dict):
+    """Обработчик события ReviewLeftEvent - обновление рейтинга клиента"""
+    try:
+        reviewed_id = event_data.get("reviewed_id")
+        if not reviewed_id:
+            logger.warning("ReviewLeftEvent: missing reviewed_id")
+            return
+
+        grade = event_data.get("grade")
+        if grade is None:
+            logger.warning("ReviewLeftEvent: missing grade")
+            return
+
+        review_type = event_data.get("review_type")
+        if review_type != "Client":
+            # Это событие не для нас (отзыв не о клиенте)
+            return
+
+        db = SessionLocal()
+        try:
+            client = db.query(Client).filter(Client.guid == str(reviewed_id)).first()
+            if not client:
+                logger.warning(f"ReviewLeftEvent: client {reviewed_id} not found")
+                return
+
+            # Формула: новый_рейтинг = (старый_рейтинг * количество + новая_оценка) / (количество + 1)
+            current_grade = client.average_grade or 0.0
+            current_count = client.review_count or 0
+
+            if current_count == 0:
+                client.average_grade = float(grade)
+            else:
+                total_grade = current_grade * current_count + float(grade)
+                client.average_grade = total_grade / (current_count + 1)
+
+            client.review_count = current_count + 1
+
+            db.commit()
+            logger.info(f"ReviewLeftEvent: updated rating for client {reviewed_id} (new grade: {client.average_grade})")
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error handling ReviewLeftEvent: {e}")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.error(f"Error handling ReviewLeftEvent: {e}")
+
 async def start_consumers():
     """Запустить все consumers для Client Service"""
     try:
@@ -224,6 +271,11 @@ async def start_consumers():
             "UserDeletedEvent",
             "client_user_deleted_queue",
             handle_user_deleted
+        )
+        await consume_event(
+            "ReviewLeftEvent",
+            "client_review_left_queue",
+            handle_review_left
         )
         logger.info("Client Service consumers started")
     except Exception as e:

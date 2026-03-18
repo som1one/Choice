@@ -14,6 +14,23 @@ import json
 
 router = APIRouter(prefix="/api/client", tags=["client"])
 
+
+def _normalize_radius_meters(search_radius: int | None) -> int:
+    radius = search_radius or 0
+    if radius <= 0:
+        return 20_000
+    return radius * 1000 if radius <= 100 else radius
+
+
+def _parse_coordinates(raw: str | None) -> tuple[float, float] | None:
+    if not raw:
+        return None
+    try:
+        lat, lng = map(float, raw.split(","))
+        return lat, lng
+    except (ValueError, AttributeError):
+        return None
+
 @router.get("/get", response_model=ClientResponse)
 async def get_client(
     db: Session = Depends(get_db),
@@ -76,6 +93,9 @@ async def get_client_by_guid(
     
     repository = ClientRepository(db)
     client = await repository.get(guid)
+    # Backward compatibility: иногда на фронте прилетает внутренний numeric id клиента
+    if not client and guid.isdigit():
+        client = db.query(Client).filter(Client.id == int(guid)).first()
     
     if not client:
         raise HTTPException(
@@ -340,6 +360,7 @@ async def send_order_request(
         search_radius=request.search_radius,
         to_know_price="true" if request.to_know_price else "false",
         to_know_deadline="true" if request.to_know_deadline else "false",
+        to_know_specialist="true" if request.to_know_specialist else "false",
         to_know_enrollment_date="true" if request.to_know_enrollment_date else "false",
         photo_uris=json.dumps(request.photo_uris) if request.photo_uris else None,
         status=0  # Active
@@ -428,6 +449,9 @@ async def get_order_requests(
         else:
             requests = await repo.get_by_client(client.id)
         
+        for req in requests:
+            if not hasattr(req, "client_guid"):
+                setattr(req, "client_guid", str(client.guid))
         return requests
     
     # Для компаний - фильтруем по категориям компании и радиусу
@@ -466,19 +490,52 @@ async def get_order_requests(
         # Фильтруем по радиусу (расстояние между компанией и клиентом)
         requests_in_radius = []
         company_coords = company.coordinates
+        def _is_legacy_default_coords(value: str | None) -> bool:
+            if not value:
+                return True
+            normalized = value.replace(" ", "")
+            return normalized in {"55.7558,37.6173", "55.755800,37.617300"}
+
+        # Автовосстановление координат, если в базе остались старые заглушки
+        if _is_legacy_default_coords(company_coords):
+            try:
+                company.coordinates = await geocode(company.city, company.street)
+                db.commit()
+                company_coords = company.coordinates
+            except Exception:
+                pass
+        if not company_coords:
+            company_coords_parsed = None
+        else:
+            company_coords_parsed = _parse_coordinates(company_coords)
         
         for req in filtered_requests:
             # Получаем клиента заявки по ID (client_id - это Integer)
             client = db.query(Client).filter(Client.id == req.client_id).first()
             
-            if not client or not client.coordinates:
+            if not client:
+                continue
+            if _is_legacy_default_coords(client.coordinates):
+                try:
+                    client.coordinates = await geocode(client.city, client.street)
+                    db.commit()
+                except Exception:
+                    pass
+            client_coords_parsed = _parse_coordinates(client.coordinates)
+            if client_coords_parsed is None:
+                setattr(req, "client_guid", str(client.guid))
+                requests_in_radius.append(req)
                 continue
             
             # Вычисляем расстояние между компанией и клиентом
             try:
-                # Парсим координаты (формат: "lat,lng")
-                company_lat, company_lng = map(float, company_coords.split(','))
-                client_lat, client_lng = map(float, client.coordinates.split(','))
+                if company_coords_parsed is None:
+                    setattr(req, "client_guid", str(client.guid))
+                    requests_in_radius.append(req)
+                    continue
+
+                company_lat, company_lng = company_coords_parsed
+                client_lat, client_lng = client_coords_parsed
                 
                 # Вычисляем расстояние в метрах (приблизительно, используя формулу гаверсинуса)
                 from math import radians, cos, sin, asin, sqrt
@@ -494,13 +551,19 @@ async def get_order_requests(
                     return R * c
                 
                 distance = haversine_distance(company_lat, company_lng, client_lat, client_lng)
-                
+
+                # Backward compatibility по единицам:
+                # исторически search_radius мог приходить в км (5/10/20/50),
+                # при этом distance у нас в метрах.
+                radius_meters = _normalize_radius_meters(req.search_radius)
+
                 # Проверяем, что расстояние меньше или равно радиусу поиска заявки
-                if distance <= req.search_radius:
+                if distance <= radius_meters:
+                    setattr(req, "client_guid", str(client.guid))
                     requests_in_radius.append(req)
             except (ValueError, AttributeError):
-                # Если не удалось вычислить расстояние, пропускаем заявку
-                continue
+                setattr(req, "client_guid", str(client.guid))
+                requests_in_radius.append(req)
         
         return requests_in_radius
     
@@ -525,6 +588,9 @@ async def get_client_requests(
     
     repo = OrderRequestRepository(db)
     requests = await repo.get_by_client(client.id)
+    for req in requests:
+        if not hasattr(req, "client_guid"):
+            setattr(req, "client_guid", str(client.guid))
     
     return requests
 
@@ -543,6 +609,9 @@ async def get_request(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order request not found"
         )
+    client = db.query(Client).filter(Client.id == request.client_id).first()
+    if client:
+        setattr(request, "client_guid", str(client.guid))
     
     return request
 
@@ -568,6 +637,7 @@ async def change_order_request(
     order_request.search_radius = request.search_radius
     order_request.to_know_price = "true" if request.to_know_price else "false"
     order_request.to_know_deadline = "true" if request.to_know_deadline else "false"
+    order_request.to_know_specialist = "true" if request.to_know_specialist else "false"
     order_request.to_know_enrollment_date = "true" if request.to_know_enrollment_date else "false"
     order_request.photo_uris = json.dumps(request.photo_uris) if request.photo_uris else None
     

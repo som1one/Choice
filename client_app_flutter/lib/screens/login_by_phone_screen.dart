@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'enter_code_screen.dart';
 
 class LoginByPhoneScreen extends StatefulWidget {
   final Function(bool isCompany, bool needsFillData)? onLoginSuccess;
@@ -16,7 +15,7 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
   final TextEditingController _codeController = TextEditingController();
   bool _codeSent = false;
   bool _isLoading = false;
-  bool _error = false;
+  String? _errorMessage;
 
   @override
   void dispose() {
@@ -88,31 +87,27 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
 
     setState(() {
       _isLoading = true;
-      _error = false;
+      _errorMessage = null;
     });
 
     try {
       final phone = _normalizePhone(_phoneController.text.trim());
-      // TODO: Реализовать отправку кода через AuthService
-      // final success = await AuthService.loginByPhone(phone);
-      
-      // Временная заглушка
-      await Future.delayed(const Duration(seconds: 1));
-      final success = true;
+      final success = await AuthService.loginByPhone(phone);
 
       if (success && mounted) {
         setState(() {
           _codeSent = true;
+          _codeController.clear();
         });
       } else if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Не удалось отправить код. Проверьте номер и попробуйте снова.';
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Ошибка сети при отправке кода.';
         });
       }
     } finally {
@@ -129,20 +124,16 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
 
     setState(() {
       _isLoading = true;
-      _error = false;
+      _errorMessage = null;
     });
 
     try {
       final phone = _normalizePhone(_phoneController.text.trim());
       final code = _codeController.text.trim();
-      
-      // TODO: Реализовать верификацию кода через AuthService
-      // final userType = await AuthService.verifyCode(phone, code);
-      
-      // Временная заглушка - всегда успех
-      final success = true;
-      final isCompany = false;
-      final needsFillData = false;
+      final result = await AuthService.verifyCode(phone: phone, code: code);
+      final success = result?['success'] == true;
+      final isCompany = result?['isCompany'] == true;
+      final needsFillData = result?['needsFillData'] == true;
 
       if (success && mounted) {
         if (widget.onLoginSuccess != null) {
@@ -150,13 +141,13 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
         }
       } else if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Неверный код или код истёк.';
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Ошибка сети при проверке кода.';
         });
       }
     } finally {
@@ -202,10 +193,10 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              if (_error) ...[
+              if (_errorMessage != null) ...[
                 const SizedBox(height: 5),
-                const Text(
-                  'Неверный код',
+                Text(
+                  _errorMessage!,
                   style: TextStyle(
                     color: Color(0xFFE64646),
                     fontWeight: FontWeight.w400,
@@ -246,6 +237,13 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
                         ),
                 ),
               ),
+              const SizedBox(height: 12),
+              Center(
+                child: TextButton(
+                  onPressed: _isLoading ? null : _sendCode,
+                  child: const Text('Отправить код повторно'),
+                ),
+              ),
             ] else ...[
               const Text(
                 'Телефон',
@@ -271,10 +269,10 @@ class _LoginByPhoneScreenState extends State<LoginByPhoneScreen> {
                 ),
                 onChanged: (_) => setState(() {}),
               ),
-              if (_error) ...[
+              if (_errorMessage != null) ...[
                 const SizedBox(height: 5),
-                const Text(
-                  'Ошибка при отправке кода',
+                Text(
+                  _errorMessage!,
                   style: TextStyle(
                     color: Color(0xFFE64646),
                     fontWeight: FontWeight.w400,

@@ -25,6 +25,9 @@ class Order(Base):
     price = Column(Integer, nullable=False)
     prepayment = Column(Integer, default=0)
     deadline = Column(Integer, nullable=False)  # в днях
+    response_text = Column(String, nullable=True)
+    specialist_name = Column(String, nullable=True)
+    specialist_phone = Column(String, nullable=True)
     enrollment_date = Column(DateTime, nullable=True)
     is_enrolled = Column(Boolean, default=False)
     is_date_confirmed = Column(Boolean, default=True)

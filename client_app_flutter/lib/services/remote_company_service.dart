@@ -33,14 +33,18 @@ class RemoteCompanyService {
     if (json is Map<String, dynamic>) {
       final companies = json['companies'] ?? json['data'];
       if (companies is List) {
-        return (companies as List).map((e) => e as Map<String, dynamic>).toList();
+        return (companies as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
       }
     }
     return [];
   }
 
   /// Получить компании по категории
-  Future<List<Map<String, dynamic>>?> getCompaniesByCategory(int categoryId) async {
+  Future<List<Map<String, dynamic>>?> getCompaniesByCategory(
+    int categoryId,
+  ) async {
     final json = await ApiClient.getJson(
       '/api/company/getByCategory?category_id=$categoryId',
       baseUrl: ApiConfig.companyBaseUrl,
@@ -52,7 +56,9 @@ class RemoteCompanyService {
     if (json is Map<String, dynamic>) {
       final companies = json['companies'] ?? json['data'];
       if (companies is List) {
-        return (companies as List).map((e) => e as Map<String, dynamic>).toList();
+        return (companies as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
       }
     }
     return [];
@@ -75,6 +81,7 @@ class RemoteCompanyService {
       '/api/company/changeData',
       data,
       baseUrl: ApiConfig.companyBaseUrl,
+      throwOnError: true,
     );
     return json != null;
   }
@@ -90,9 +97,11 @@ class RemoteCompanyService {
   }
 
   /// Получить заявки для компании (с фильтрацией по категориям и радиусу)
-  Future<List<Map<String, dynamic>>?> getOrderRequests({List<int>? categoriesId}) async {
+  Future<List<Map<String, dynamic>>?> getOrderRequests({
+    List<int>? categoriesId,
+  }) async {
     String url = '/api/company/getOrderRequests';
-    
+
     // Формируем query параметры для categoriesId[]
     if (categoriesId != null && categoriesId.isNotEmpty) {
       final queryParams = categoriesId
@@ -100,12 +109,12 @@ class RemoteCompanyService {
           .join('&');
       url = '$url?$queryParams';
     }
-    
+
     final json = await ApiClient.getJson(
       url,
       baseUrl: ApiConfig.companyBaseUrl,
     );
-    
+
     if (json == null) return null;
     if (json is List) {
       return (json as List).map((e) => e as Map<String, dynamic>).toList();
@@ -113,7 +122,9 @@ class RemoteCompanyService {
     if (json is Map<String, dynamic>) {
       final requests = json['requests'] ?? json['data'];
       if (requests is List) {
-        return (requests as List).map((e) => e as Map<String, dynamic>).toList();
+        return (requests as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
       }
     }
     return [];

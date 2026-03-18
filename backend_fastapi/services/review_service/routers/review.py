@@ -30,12 +30,26 @@ async def send_review(
     
     ordering_service_url = os.getenv("ORDERING_SERVICE_URL", "http://localhost:8005")
     ordering_service_url = f"{ordering_service_url}/api/order/addReview"
+
+    user_type = current_user.get("user_type")
+    # Клиент оценивает компанию, компания оценивает клиента
+    if user_type == "Company":
+        client_id = request.guid
+        company_id = sender_id
+    else:
+        client_id = sender_id
+        company_id = request.guid
     
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
             response = await client.put(
                 ordering_service_url,
-                params={"client_id": sender_id, "company_id": request.guid}
+                params={
+                    "client_id": client_id,
+                    "company_id": company_id,
+                    "reviewer_id": sender_id,
+                    "reserve": "true",
+                }
             )
             if response.status_code == 200:
                 result = response.json()

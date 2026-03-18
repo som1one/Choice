@@ -14,7 +14,11 @@ class CompanyOrderResponse {
   });
 
   String get companyName => company['title'] ?? company['name'] ?? 'Компания';
-  double get rating => (company['average_grade'] ?? company['rating'] as num?)?.toDouble() ?? 0.0;
+  double get rating {
+    final raw = company['average_grade'] ?? company['averageGrade'] ?? company['rating'];
+    if (raw is num) return raw.toDouble();
+    return double.tryParse(raw?.toString() ?? '') ?? 0.0;
+  }
   int get price => order['price'] ?? 0;
   int get deadline => order['deadline'] ?? 0;
   String? get companyId => (order['company_id'] ?? order['companyId'])?.toString();

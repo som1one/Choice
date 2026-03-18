@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'screens/welcome_screen.dart';
-import 'screens/login_screen_new.dart';
 import 'navigation/client_tab_navigator.dart';
 import 'navigation/company_tab_navigator.dart';
 import 'services/auth_service.dart';
@@ -15,12 +14,12 @@ import 'services/api_client.dart';
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   try {
     // Проверяем, не инициализирован ли уже Firebase
-    if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp();
-    }
-    print('Background message received: ${message.messageId}');
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      debugPrint('Background message received: ${message.messageId}');
   } catch (e) {
-    print('Firebase background handler error: $e');
+    debugPrint('Firebase background handler error: $e');
   }
 }
 
@@ -39,11 +38,11 @@ void main() async {
       // Инициализация push-уведомлений
       await PushNotificationService.initialize();
     } catch (e) {
-      print('Firebase initialization error: $e');
+      debugPrint('Firebase initialization error: $e');
       // Продолжаем работу приложения даже если Firebase не инициализирован
     }
   } else {
-    print('Firebase skipped on web platform');
+    debugPrint('Firebase skipped on web platform');
   }
   
   runApp(const MyApp());

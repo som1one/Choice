@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import '../utils/auth_guard.dart';
+import '../services/remote_company_service.dart';
 import 'reset_password_screen.dart';
 
 class LoginByEmailScreen extends StatefulWidget {
@@ -16,8 +16,9 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
-  bool _error = false;
+  String? _errorMessage;
   bool _obscurePassword = true;
+  final RemoteCompanyService _remoteCompanyService = RemoteCompanyService();
 
   @override
   void dispose() {
@@ -31,12 +32,36 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
         _passwordController.text.isNotEmpty;
   }
 
+  Future<bool> _checkCompanyNeedsFillData() async {
+    try {
+      final profile = await _remoteCompanyService.getCompanyProfile();
+      if (profile == null || profile.isEmpty) return true;
+
+      final categories = profile['categories_id'];
+      final photos = profile['photo_uris'];
+      final siteUrl = (profile['site_url'] ?? '').toString().trim();
+      final description = (profile['description'] ?? '').toString().trim();
+      final isDataFilled = profile['is_data_filled'] == true;
+
+      if (isDataFilled) return false;
+
+      final hasCategories = categories is List && categories.isNotEmpty;
+      final hasPhotos = photos is List && photos.any((e) => e != null && e.toString().trim().isNotEmpty);
+      final hasBaseInfo = siteUrl.isNotEmpty || description.isNotEmpty;
+
+      return !(hasCategories || hasPhotos || hasBaseInfo);
+    } catch (_) {
+      // На ошибке сети лучше не блокировать вход заполнением.
+      return false;
+    }
+  }
+
   Future<void> _login() async {
     if (!_isFormValid || _isLoading) return;
 
     setState(() {
       _isLoading = true;
-      _error = false;
+      _errorMessage = null;
     });
 
     try {
@@ -56,8 +81,7 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
           }
           return;
         } else if (userType == UserType.company) {
-          // TODO: Проверить, заполнены ли данные компании
-          final needsFillData = false; // TODO: проверить через UserProfileService
+          final needsFillData = await _checkCompanyNeedsFillData();
           if (widget.onLoginSuccess != null) {
             widget.onLoginSuccess!(true, needsFillData);
           }
@@ -74,13 +98,13 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
       // Если не удалось войти
       if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Неверный логин или пароль';
         });
       }
-    } catch (e) {
+    } catch (_) {
       if (mounted) {
         setState(() {
-          _error = true;
+          _errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова.';
         });
       }
     } finally {
@@ -126,7 +150,6 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
                   borderRadius: BorderRadius.circular(8),
                   borderSide: const BorderSide(color: Color(0xFFE64646)),
                 ),
-                errorText: _error ? null : null,
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -170,10 +193,10 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
               ),
               onChanged: (_) => setState(() {}),
             ),
-            if (_error) ...[
+            if (_errorMessage != null) ...[
               const SizedBox(height: 5),
-              const Text(
-                'Пароль или логин неверны',
+              Text(
+                _errorMessage!,
                 style: TextStyle(
                   color: Color(0xFFE64646),
                   fontWeight: FontWeight.w400,

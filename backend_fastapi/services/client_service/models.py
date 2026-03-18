@@ -38,6 +38,7 @@ class OrderRequest(Base):
     search_radius = Column(Integer, default=0)
     to_know_price = Column(String, default="false")
     to_know_deadline = Column(String, default="false")
+    to_know_specialist = Column(String, default="false")
     to_know_enrollment_date = Column(String, default="false")
     photo_uris = Column(String, nullable=True)  # JSON string
     status = Column(Integer, default=0)  # 0 - Active, 1 - Draft

@@ -43,6 +43,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   final ImagePicker _picker = ImagePicker();
   bool _isAdmin = false;
   bool _isLoading = true;
+  bool _isSaving = false;
+  Map<String, dynamic>? _remoteProfile;
   final RemoteCompanyService _companyService = RemoteCompanyService();
 
   @override
@@ -56,7 +58,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   Future<void> _ensureAuthorized() async {
     final loggedIn = await AuthService.isLoggedIn();
     final userType = await AuthService.getUserType();
-    final ok = loggedIn && (userType == UserType.company || userType == UserType.admin);
+    final ok =
+        loggedIn &&
+        (userType == UserType.company || userType == UserType.admin);
 
     if (!mounted) return;
     if (!ok) {
@@ -94,7 +98,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     try {
       // Загружаем данные из API
       final profile = await _companyService.getCompanyProfile();
-      
+
       // Загружаем сохраненные настройки из SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString('company_settings');
@@ -108,39 +112,49 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       setState(() {
         // Сначала загружаем данные из API профиля (если есть)
         if (profile != null) {
+          _remoteProfile = profile;
           final title = profile['title']?.toString() ?? '';
           final email = profile['email']?.toString() ?? '';
           final phone = profile['phone_number']?.toString() ?? '';
-          
+
           if (title.isNotEmpty) _controllers['Название']!.text = title;
           if (email.isNotEmpty) _controllers['Mail']!.text = email;
           if (phone.isNotEmpty) _controllers['Телефон']!.text = phone;
-          
+
           // Адрес из API
           final address = profile['address'];
           if (address is Map<String, dynamic>) {
             final city = address['city']?.toString() ?? '';
             final street = address['street']?.toString() ?? '';
             if (city.isNotEmpty || street.isNotEmpty) {
-              _controllers['Адрес']!.text = [city, street].where((s) => s.isNotEmpty).join(', ');
+              _controllers['Адрес']!.text = [
+                city,
+                street,
+              ].where((s) => s.isNotEmpty).join(', ');
             }
           }
-          
+
           final siteUrl = profile['site_url']?.toString() ?? '';
           final specialistName = profile['specialist_name']?.toString() ?? '';
           final activities = profile['activities']?.toString() ?? '';
-          
-          if (siteUrl.isNotEmpty) _controllers['Сайт']!.text = siteUrl;
-          if (specialistName.isNotEmpty) _controllers['Имя специалиста']!.text = specialistName;
-          if (activities.isNotEmpty) _controllers['Виды деятельности']!.text = activities;
-          
+
+          if (siteUrl.isNotEmpty) {
+            _controllers['Сайт']!.text = siteUrl;
+          }
+          if (specialistName.isNotEmpty) {
+            _controllers['Имя специалиста']!.text = specialistName;
+          }
+          if (activities.isNotEmpty) {
+            _controllers['Виды деятельности']!.text = activities;
+          }
+
           // Логотип из API
           final iconUri = profile['icon_uri'];
           if (iconUri != null && iconUri.toString().isNotEmpty) {
             _logoPath = '${ApiConfig.fileBaseUrl}/api/objects/$iconUri';
           }
         }
-        
+
         // Затем загружаем из сохраненных настроек (для полей, которые не заполнены из API)
         _logoPath = savedData['logoPath'] as String? ?? _logoPath;
         for (final key in _checkboxes.keys) {
@@ -149,11 +163,13 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
         for (final key in _controllers.keys) {
           final savedValue = savedData['f_$key'] as String?;
           // Заполняем только если поле пустое (данные из регистрации как fallback)
-          if (savedValue != null && savedValue.isNotEmpty && _controllers[key]!.text.isEmpty) {
+          if (savedValue != null &&
+              savedValue.isNotEmpty &&
+              _controllers[key]!.text.isEmpty) {
             _controllers[key]!.text = savedValue;
           }
         }
-        
+
         _isLoading = false;
       });
     } catch (e) {
@@ -184,6 +200,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   }
 
   Future<void> _saveSettings() async {
+    if (_isSaving) return;
+    setState(() {
+      _isSaving = true;
+    });
+
     // Сохраняем локально
     final prefs = await SharedPreferences.getInstance();
     final data = <String, dynamic>{'logoPath': _logoPath};
@@ -195,85 +216,190 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     }
     await prefs.setString('company_settings', jsonEncode(data));
 
-    // Отправляем на сервер, если API настроен
-    if (ApiConfig.isConfigured) {
-      try {
-        // Получаем город и адрес
+    bool savedToServer = !ApiConfig.isConfigured;
+    String? serverError;
+    try {
+      if (ApiConfig.isConfigured) {
+        List<String> toStringList(dynamic raw) {
+          if (raw is! List) return <String>[];
+          return raw
+              .map((e) => e?.toString() ?? '')
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+
+        List<int> toIntList(dynamic raw) {
+          if (raw is! List) return <int>[];
+          return raw
+              .map((e) => int.tryParse(e.toString()))
+              .whereType<int>()
+              .toList();
+        }
+
         final addressField = _controllers['Адрес']!.text.trim();
         String city = '';
         String street = '';
         if (addressField.isNotEmpty) {
-          // Пытаемся разделить адрес на город и улицу
           final addressParts = addressField.split(',');
           if (addressParts.length >= 2) {
             city = addressParts[0].trim();
             street = addressParts.sublist(1).join(',').trim();
           } else {
-            // Если нет запятой, считаем весь адрес городом
             city = addressField;
-            street = '';
           }
         }
 
-        // Получаем обязательные поля
+        final remoteAddress = _remoteProfile?['address'];
+        final remoteCity = remoteAddress is Map<String, dynamic>
+            ? remoteAddress['city']?.toString()
+            : _remoteProfile?['city']?.toString();
+        final remoteStreet = remoteAddress is Map<String, dynamic>
+            ? remoteAddress['street']?.toString()
+            : _remoteProfile?['street']?.toString();
+
+        city = city.isNotEmpty ? city : (remoteCity ?? '');
+        street = street.isNotEmpty ? street : (remoteStreet ?? '');
+        if (city.isEmpty && street.isNotEmpty) {
+          city = street;
+        }
+        if (street.isEmpty && city.isNotEmpty) {
+          street = city;
+        }
+
         final title = _controllers['Название']!.text.trim();
         final email = _controllers['Mail']!.text.trim();
         final phoneNumber = _controllers['Телефон']!.text.trim();
+        final siteUrlText = _controllers['Сайт']!.text.trim();
+        final activitiesText = _controllers['Виды деятельности']!.text.trim();
 
-        // Проверяем, что обязательные поля заполнены (API требует title, phone_number, email, city, street)
-        if (title.isNotEmpty && email.isNotEmpty && phoneNumber.isNotEmpty && city.isNotEmpty) {
-          // Формируем данные для отправки на сервер
-          final changeDataPayload = <String, dynamic>{
-            'title': title,
-            'email': email,
-            'phone_number': phoneNumber,
-            'site_url': _controllers['Сайт']!.text.trim(),
-            'city': city,
-            'street': street.isNotEmpty ? street : city, // Если street пустой, используем city
-            'social_medias': <String>[], // TODO: Добавить поддержку соцсетей
-            'photo_uris': <String>[], // TODO: Добавить поддержку фото
-            'categories_id': <int>[], // TODO: Добавить поддержку категорий
-            'description': _controllers['Виды деятельности']!.text.trim(),
-          };
+        final siteUrl = siteUrlText.isNotEmpty
+            ? siteUrlText
+            : (_remoteProfile?['site_url']?.toString() ??
+                  _remoteProfile?['siteUrl']?.toString() ??
+                  '');
+        final description = activitiesText.isNotEmpty
+            ? activitiesText
+            : (_remoteProfile?['description']?.toString() ?? '');
 
-          // Отправляем данные на сервер
-          await _companyService.changeData(changeDataPayload);
-        } else {
-          print('Не все обязательные поля заполнены для отправки на сервер');
+        if (title.isEmpty ||
+            email.isEmpty ||
+            phoneNumber.isEmpty ||
+            city.isEmpty ||
+            street.isEmpty) {
+          throw StateError('Заполните название, email, телефон и адрес');
         }
-      } catch (e) {
-        // Если ошибка при отправке на сервер, все равно показываем успех
-        // (данные сохранены локально)
-        print('Ошибка при сохранении настроек на сервер: $e');
+
+        final changeDataPayload = <String, dynamic>{
+          'title': title,
+          'email': email,
+          'phone_number': phoneNumber,
+          'site_url': siteUrl,
+          'city': city,
+          'street': street,
+          'social_medias': toStringList(
+            _remoteProfile?['social_medias'] ?? _remoteProfile?['socialMedias'],
+          ),
+          'photo_uris': toStringList(
+            _remoteProfile?['photo_uris'] ?? _remoteProfile?['photoUris'],
+          ),
+          'categories_id': toIntList(
+            _remoteProfile?['categories_id'] ?? _remoteProfile?['categoriesId'],
+          ),
+          'description': description,
+          'card_color':
+              _remoteProfile?['card_color']?.toString() ??
+              _remoteProfile?['cardColor']?.toString() ??
+              '#2196F3',
+        };
+
+        final changed = await _companyService.changeData(changeDataPayload);
+        if (!changed) {
+          throw StateError('Сервер не подтвердил сохранение компании');
+        }
+        _remoteProfile = {
+          ...?_remoteProfile,
+          ...changeDataPayload,
+          'address': {'city': city, 'street': street},
+        };
+        savedToServer = true;
+      }
+    } catch (e) {
+      savedToServer = false;
+      serverError = e.toString();
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSaving = false;
+        });
       }
     }
 
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Настройки компании сохранены')),
-    );
+    if (savedToServer && ApiConfig.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Настройки компании сохранены')),
+      );
+    } else if (!ApiConfig.isConfigured) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Настройки компании сохранены локально')),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Локально сохранено, но сервер вернул ошибку: ${serverError ?? 'неизвестно'}',
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _pickLogo() async {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
-    
+
     // Загружаем изображение на сервер
     if (ApiConfig.isConfigured) {
-      final fileService = RemoteFileService();
-      final filename = await fileService.uploadFile(image.path);
-      
-      if (filename != null) {
-        // Обновляем иконку через API
-        final companyService = RemoteCompanyService();
-        await companyService.changeIconUri(filename);
+      try {
+        final fileService = RemoteFileService();
+        final filename = await fileService.uploadFile(image.path);
+
+        if (filename != null) {
+          // Обновляем иконку через API
+          final companyService = RemoteCompanyService();
+          await companyService.changeIconUri(filename);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Не удалось загрузить логотип на сервер'),
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Ошибка загрузки логотипа на сервер')),
+          );
+        }
       }
     }
-    
+
     setState(() {
       _logoPath = image.path;
     });
-    await _saveSettings();
+
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString('company_settings');
+    final data = raw == null
+        ? <String, dynamic>{}
+        : jsonDecode(raw) as Map<String, dynamic>;
+    data['logoPath'] = _logoPath;
+    await prefs.setString('company_settings', jsonEncode(data));
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(const SnackBar(content: Text('Логотип обновлен')));
   }
 
   void _showInstructions() {
@@ -324,7 +450,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       _InstructionItem(
                         number: '1',
                         title: 'Регистрация',
-                        content: 'Для использования приложения необходимо зарегистрироваться. '
+                        content:
+                            'Для использования приложения необходимо зарегистрироваться. '
                             'При регистрации требуется логин (электронная почта) и пароль (не менее 6 символов).',
                       ),
                       SizedBox(height: 16),
@@ -332,36 +459,41 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                         number: '2',
                         title: 'Личный кабинет',
                         icon: Icons.person,
-                        content: '• Создание карточки компании\n'
+                        content:
+                            '• Создание карточки компании\n'
                             '• Управление паролем\n'
-                            '• Создание предоплаты',
+                            '• Редактирование данных компании',
                       ),
                       SizedBox(height: 16),
                       _InstructionItem(
                         number: '3',
                         title: 'Соцсети',
-                        content: 'Внизу окна можно выбрать иконки соцсетей, чтобы добавить '
+                        content:
+                            'Внизу окна можно выбрать иконки соцсетей, чтобы добавить '
                             'социальную сеть компании в карточку компании.',
                       ),
                       SizedBox(height: 16),
                       _InstructionItem(
                         number: '4',
                         title: 'Отображение на карте',
-                        content: 'Компания будет отображаться на карте по адресу, указанному в настройках. '
+                        content:
+                            'Компания будет отображаться на карте по адресу, указанному в настройках. '
                             'На карте будет отображаться логотип компании и рейтинг.',
                       ),
                       SizedBox(height: 16),
                       _InstructionItem(
                         number: '5',
                         title: 'Рейтинг',
-                        content: 'Рейтинг появляется после диалога клиента с компанией. '
+                        content:
+                            'Рейтинг появляется после диалога клиента с компанией. '
                             'На карте отображается общий рейтинг клиента (клиент может не ставить оценку).',
                       ),
                       SizedBox(height: 16),
                       _InstructionItem(
                         number: '6',
                         title: 'Диалог с клиентом',
-                        content: 'Клиент запрашивает услугу/товар и отмечает важные вопросы. '
+                        content:
+                            'Клиент запрашивает услугу/товар и отмечает важные вопросы. '
                             'Компания получает уведомление (звук, отметка) и должна быстро ответить. '
                             'Ответ компании будет отображаться на карте в виде: логотип, цена, сроки, рейтинг '
                             '(для товара: цена и наличие).',
@@ -370,7 +502,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       _InstructionItem(
                         number: '7',
                         title: 'Выбор клиента',
-                        content: 'Ответы компаний отображаются на карте. Клиент может выбрать компанию, '
+                        content:
+                            'Ответы компаний отображаются на карте. Клиент может выбрать компанию, '
                             'открыть карточку компании, посмотреть фото, перейти в соцсети, написать отзыв и поставить оценку. '
                             'Компания также может оценить клиента после выполнения услуги или продажи товара, '
                             'а также видеть рейтинг клиента во время общения.',
@@ -378,16 +511,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                       SizedBox(height: 16),
                       _InstructionItem(
                         number: '8',
-                        title: 'Предоплата',
-                        content: 'Компания получает предоплату на карту или счет. '
-                            'Если компания не хочет работать с предоплатой, не нужно нажимать кнопку '
-                            '"работа с предоплатой". Предоплату можно отменить.',
-                      ),
-                      SizedBox(height: 16),
-                      _InstructionItem(
-                        number: '9',
                         title: 'Кнопка чат с клиентом',
-                        content: 'Компания может просмотреть переписку с клиентом через эту кнопку.',
+                        content:
+                            'Компания может просмотреть переписку с клиентом через эту кнопку.',
                       ),
                     ],
                   ),
@@ -403,22 +529,15 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
-    
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 1.0,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 1.0)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -477,7 +596,9 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                   icon: _buildPersonIcon(),
                   onPressed: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Вы уже в настройках компании')),
+                      const SnackBar(
+                        content: Text('Вы уже в настройках компании'),
+                      ),
                     );
                   },
                 ),
@@ -497,21 +618,60 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                 style: TextStyle(fontSize: 14, color: Colors.black87),
               ),
               const SizedBox(height: 20),
-              
-              _buildInputFieldWithCheckbox(Icons.edit, 'Название', _checkboxes['Название']!, _controllers['Название']!),
-              _buildInputFieldWithCheckbox(Icons.home, 'Адрес', _checkboxes['Адрес']!, _controllers['Адрес']!),
-              _buildInputFieldWithCheckbox(Icons.mail, 'Mail', _checkboxes['Mail']!, _controllers['Mail']!),
-              _buildInputFieldWithCheckbox(Icons.phone, 'Телефон', _checkboxes['Телефон']!, _controllers['Телефон']!),
-              _buildInputFieldWithCheckbox(Icons.person, 'Имя специалиста', _checkboxes['Имя специалиста']!, _controllers['Имя специалиста']!),
-              _buildInputFieldWithCheckbox(Icons.account_tree, 'Виды деятельности', _checkboxes['Виды деятельности']!, _controllers['Виды деятельности']!),
-              _buildInputFieldWithCheckbox(Icons.language, 'Сайт', _checkboxes['Сайт']!, _controllers['Сайт']!),
-              
+
+              _buildInputFieldWithCheckbox(
+                Icons.edit,
+                'Название',
+                _checkboxes['Название']!,
+                _controllers['Название']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.home,
+                'Адрес',
+                _checkboxes['Адрес']!,
+                _controllers['Адрес']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.mail,
+                'Mail',
+                _checkboxes['Mail']!,
+                _controllers['Mail']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.phone,
+                'Телефон',
+                _checkboxes['Телефон']!,
+                _controllers['Телефон']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.person,
+                'Имя специалиста',
+                _checkboxes['Имя специалиста']!,
+                _controllers['Имя специалиста']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.account_tree,
+                'Виды деятельности',
+                _checkboxes['Виды деятельности']!,
+                _controllers['Виды деятельности']!,
+              ),
+              _buildInputFieldWithCheckbox(
+                Icons.language,
+                'Сайт',
+                _checkboxes['Сайт']!,
+                _controllers['Сайт']!,
+              ),
+
               const SizedBox(height: 12),
               _buildAddPhotoField(),
 
               const Divider(height: 32, thickness: 1, color: Colors.black),
 
-              _buildTextFieldWithIcon(Icons.settings, 'Логин', _controllers['Логин']!),
+              _buildTextFieldWithIcon(
+                Icons.settings,
+                'Логин',
+                _controllers['Логин']!,
+              ),
               const SizedBox(height: 12),
               _buildTextField('Пароль', _controllers['Пароль']!, obscure: true),
               const SizedBox(height: 12),
@@ -519,34 +679,17 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
               const Divider(height: 32, thickness: 1, color: Colors.black),
 
-              Row(
-                children: [
-                  Icon(Icons.monetization_on, size: 24, color: Colors.grey[700]),
-                  const SizedBox(width: 8),
-                  const Text('Деньги', style: TextStyle(fontSize: 16)),
-                ],
+              _buildPrepaymentButton(
+                'Чат с клиентом',
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ChatsScreen(),
+                    ),
+                  );
+                },
               ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildPrepaymentButton('Настроить прием предоплаты'),
-                  ),
-                  const SizedBox(width: 8),
-                  _buildRoundPrepaymentButton('Работа с предоплатой'),
-                  const SizedBox(width: 8),
-                  _buildRoundPrepaymentButton('Отмена предоплаты'),
-                ],
-              ),
-
-              const SizedBox(height: 20),
-
-              _buildPrepaymentButton('Чат с клиентом', onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const ChatsScreen()),
-                );
-              }),
 
               const SizedBox(height: 24),
 
@@ -557,7 +700,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                   _buildSocialIcon(Icons.message, Colors.green),
                   _buildSocialIcon(Icons.telegram, Colors.blue),
                   _buildSocialIcon(Icons.circle, Colors.orange), // OK
-                  _buildSocialIcon(Icons.play_circle_filled, Colors.red), // YouTube
+                  _buildSocialIcon(
+                    Icons.play_circle_filled,
+                    Colors.red,
+                  ), // YouTube
                   _buildSocialIcon(Icons.facebook, Colors.blue),
                   _buildSocialIcon(Icons.circle, Colors.blue[900]!), // VK
                 ],
@@ -586,8 +732,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              _buildPrepaymentButton('Сохранить настройки', onTap: _saveSettings),
-              
+              _buildPrepaymentButton(
+                _isSaving ? 'Сохранение...' : 'Сохранить настройки',
+                onTap: _isSaving ? null : _saveSettings,
+              ),
+
               // Кнопка для администратора
               if (_isAdmin) ...[
                 const SizedBox(height: 24),
@@ -630,7 +779,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           children: [
             Icon(icon, size: 24, color: Colors.grey[700]),
             const SizedBox(width: 12),
-            SizedBox(width: 110, child: Text(label, style: const TextStyle(fontSize: 15))),
+            SizedBox(
+              width: 110,
+              child: Text(label, style: const TextStyle(fontSize: 15)),
+            ),
             Expanded(
               child: TextField(
                 controller: controller,
@@ -743,7 +895,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.lightBlue[300],
+          color: onTap == null ? Colors.grey[400] : Colors.lightBlue[300],
           borderRadius: BorderRadius.circular(8),
         ),
         child: Text(
@@ -751,28 +903,6 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           style: const TextStyle(
             color: Colors.white,
             fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          textAlign: TextAlign.center,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildRoundPrepaymentButton(String text) {
-    return Container(
-      width: 50,
-      height: 50,
-      decoration: BoxDecoration(
-        color: Colors.lightBlue[300],
-        shape: BoxShape.circle,
-      ),
-      child: Center(
-        child: Text(
-          text.split(' ').first,
-          style: const TextStyle(
-            color: Colors.white,
-            fontSize: 10,
             fontWeight: FontWeight.w500,
           ),
           textAlign: TextAlign.center,
@@ -794,10 +924,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
   }
 
   Widget _buildLogoutButton() {
@@ -942,11 +1069,7 @@ class _PersonIconPainter extends CustomPainter {
 
     // Рисуем голову (круг)
     final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width / 2, headRadius), headRadius, paint);
 
     // Рисуем тело (прямоугольник с вогнутой нижней частью - две "ножки")
     final bodyWidth = size.width * 0.7;

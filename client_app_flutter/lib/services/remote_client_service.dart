@@ -22,16 +22,15 @@ class RemoteClientService {
 
   /// Получить заявки (по категории или все заявки клиента)
   /// Если categoryId не указан, возвращает все заявки текущего клиента
-  Future<List<Map<String, dynamic>>?> getOrderRequests({int? categoryId}) async {
+  Future<List<Map<String, dynamic>>?> getOrderRequests({
+    int? categoryId,
+  }) async {
     final url = categoryId != null
         ? '/api/client/getOrderRequests?category_id=$categoryId'
         : '/api/client/getOrderRequests';
-    
-    final json = await ApiClient.getJson(
-      url,
-      baseUrl: ApiConfig.clientBaseUrl,
-    );
-    
+
+    final json = await ApiClient.getJson(url, baseUrl: ApiConfig.clientBaseUrl);
+
     if (json == null) return null;
     if (json is List) {
       return (json as List).map((e) => e as Map<String, dynamic>).toList();
@@ -39,7 +38,9 @@ class RemoteClientService {
     if (json is Map<String, dynamic>) {
       final requests = json['requests'] ?? json['data'];
       if (requests is List) {
-        return (requests as List).map((e) => e as Map<String, dynamic>).toList();
+        return (requests as List)
+            .map((e) => e as Map<String, dynamic>)
+            .toList();
       }
     }
     return [];
@@ -53,6 +54,7 @@ class RemoteClientService {
     required String phoneNumber,
     required String city,
     required String street,
+    bool throwOnError = false,
   }) async {
     final body = <String, dynamic>{
       'name': name,
@@ -67,6 +69,7 @@ class RemoteClientService {
       '/api/client/changeUserData',
       body,
       baseUrl: ApiConfig.clientBaseUrl,
+      throwOnError: throwOnError,
     );
     return json;
   }

@@ -67,7 +67,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         _isLoading = false;
       });
     } catch (e) {
-      print('Error loading inquiry data: $e');
+      debugPrint('Error loading inquiry data: $e');
       setState(() {
         _isLoading = false;
         _errorMessage = 'Ошибка загрузки данных';
@@ -90,7 +90,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         }
       }
     } catch (e) {
-      print('Error loading client profile: $e');
+      debugPrint('Error loading client profile: $e');
     }
   }
 
@@ -107,7 +107,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         _isLoadingResponses = false;
       });
     } catch (e) {
-      print('Error loading company responses: $e');
+      debugPrint('Error loading company responses: $e');
       setState(() {
         _companyResponses = [];
         _isLoadingResponses = false;
@@ -435,50 +435,6 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
                       ),
                     ),
                   ),
-          ),
-          // Кнопка редактирования
-          Positioned(
-            bottom: 20,
-            right: 20,
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                onTap: () {
-                  // TODO: Реализовать редактирование заявки
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Редактирование заявки'),
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFFBA68C8), Color(0xFF9C27B0)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.purple.withValues(alpha: 0.3),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.edit,
-                    color: Colors.white,
-                    size: 24,
-                  ),
-                ),
-              ),
-            ),
           ),
         ],
         ),

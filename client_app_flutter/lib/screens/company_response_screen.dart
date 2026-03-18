@@ -1,14 +1,13 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
-import 'dart:convert';
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'company_inquiries_screen.dart';
 import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
 import '../services/remote_company_service.dart';
+import '../services/remote_ordering_service.dart';
 
 class CompanyResponseScreen extends StatefulWidget {
   const CompanyResponseScreen({super.key});
@@ -20,15 +19,23 @@ class CompanyResponseScreen extends StatefulWidget {
 class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   InquiryModel? _inquiry;
   bool _isLoading = true;
+  bool _isSubmitting = false;
   String? _city; // Загружается из API
   final RemoteCompanyService _companyService = RemoteCompanyService();
-  
+  final RemoteOrderingService _orderingService = RemoteOrderingService();
+  Map<String, dynamic>? _companyProfile;
+  Map<String, dynamic>? _existingOrder;
+
   final TextEditingController _priceController = TextEditingController();
   final TextEditingController _timeController = TextEditingController();
-  final TextEditingController _specialistNameController = TextEditingController();
-  final TextEditingController _specialistPhoneController = TextEditingController();
-  final TextEditingController _appointmentDateController = TextEditingController();
-  final TextEditingController _appointmentTimeController = TextEditingController();
+  final TextEditingController _specialistNameController =
+      TextEditingController();
+  final TextEditingController _specialistPhoneController =
+      TextEditingController();
+  final TextEditingController _appointmentDateController =
+      TextEditingController();
+  final TextEditingController _appointmentTimeController =
+      TextEditingController();
   final TextEditingController _responseController = TextEditingController();
   final TextEditingController _ratingController = TextEditingController();
   final TextEditingController _prepaymentController = TextEditingController();
@@ -36,16 +43,21 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   @override
   void initState() {
     super.initState();
-    _loadInquiry();
-    _loadCity();
+    _initialize();
   }
 
-  Future<void> _loadCity() async {
+  Future<void> _initialize() async {
+    await _loadCompanyProfile();
+    await _loadInquiry();
+  }
+
+  Future<void> _loadCompanyProfile() async {
     final userType = await AuthService.getUserType();
     if (userType == UserType.company) {
       try {
         final companyProfile = await _companyService.getCompanyProfile();
         if (companyProfile != null && mounted) {
+          _companyProfile = companyProfile;
           final address = companyProfile['address'];
           String? city;
           if (address is Map<String, dynamic>) {
@@ -65,40 +77,106 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
     }
   }
 
-
   Future<void> _loadInquiry() async {
     final inquiry = await InquiryService.getCurrentInquiry();
+    if (inquiry == null) {
+      setState(() {
+        _inquiry = null;
+        _isLoading = false;
+      });
+      return;
+    }
+
+    InquiryModel hydratedInquiry = inquiry;
+    final orderRequestId = int.tryParse(inquiry.id);
+    if (orderRequestId != null) {
+      final orders = await _orderingService.getOrders(orderRequestId: orderRequestId);
+      if (orders != null && orders.isNotEmpty) {
+        final existingOrder = orders.first;
+        _existingOrder = existingOrder;
+        hydratedInquiry = inquiry.copyWith(
+          companyResponse: (existingOrder['response_text'] ??
+                  existingOrder['responseText'] ??
+                  inquiry.companyResponse)
+              ?.toString(),
+          price: (existingOrder['price'] ?? inquiry.price)?.toString(),
+          prepayment:
+              (existingOrder['prepayment'] ?? inquiry.prepayment)?.toString(),
+          time: (existingOrder['deadline'] ?? inquiry.time)?.toString(),
+          specialistName:
+              (existingOrder['specialist_name'] ??
+                      existingOrder['specialistName'] ??
+                      inquiry.specialistName)
+                  ?.toString(),
+          specialistPhone:
+              (existingOrder['specialist_phone'] ??
+                      existingOrder['specialistPhone'] ??
+                      inquiry.specialistPhone)
+                  ?.toString(),
+          appointmentDate: _formatOrderDate(
+            existingOrder['enrollment_date'] ?? existingOrder['enrollmentDate'],
+            inquiry.appointmentDate,
+          ),
+          appointmentTime: _formatOrderTime(
+            existingOrder['enrollment_date'] ?? existingOrder['enrollmentDate'],
+            inquiry.appointmentTime,
+          ),
+        );
+      }
+    }
+
+    _fillControllers(hydratedInquiry);
+
     setState(() {
-      _inquiry = inquiry;
+      _inquiry = hydratedInquiry;
       _isLoading = false;
     });
   }
 
-  Future<void> _saveResponse() async {
-    if (_inquiry == null) return;
+  void _fillControllers(InquiryModel inquiry) {
+    _responseController.text = inquiry.companyResponse ?? '';
+    _priceController.text = inquiry.price ?? '';
+    _prepaymentController.text = inquiry.prepayment ?? '';
+    _timeController.text = inquiry.time ?? '';
+    _specialistNameController.text = inquiry.specialistName ?? '';
+    _specialistPhoneController.text = inquiry.specialistPhone ?? '';
+    _appointmentDateController.text = inquiry.appointmentDate ?? '';
+    _appointmentTimeController.text = inquiry.appointmentTime ?? '';
+  }
 
-    final prefs = await SharedPreferences.getInstance();
-    final companySettingsRaw = prefs.getString('company_settings');
-    String companyName = 'Компания';
-    if (companySettingsRaw != null) {
-      try {
-        final data = jsonDecode(companySettingsRaw) as Map<String, dynamic>;
-        final configured = (data['f_Название'] as String?)?.trim();
-        if (configured != null && configured.isNotEmpty) {
-          companyName = configured;
-        }
-      } catch (_) {}
-    }
+  Future<void> _saveResponse({bool closeAfterSave = false}) async {
+    if (_inquiry == null || _isSubmitting) return;
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    final companyName =
+        (_companyProfile?['title'] ?? _inquiry!.companyName ?? 'Компания')
+            .toString();
 
     final updatedInquiry = _inquiry!.copyWith(
-      companyResponse: _responseController.text.isNotEmpty ? _responseController.text : null,
+      companyResponse: _responseController.text.isNotEmpty
+          ? _responseController.text
+          : null,
       companyName: companyName,
       price: _priceController.text.isNotEmpty ? _priceController.text : null,
+      prepayment: _prepaymentController.text.isNotEmpty
+          ? _prepaymentController.text
+          : null,
       time: _timeController.text.isNotEmpty ? _timeController.text : null,
-      specialistName: _specialistNameController.text.isNotEmpty ? _specialistNameController.text : null,
-      specialistPhone: _specialistPhoneController.text.isNotEmpty ? _specialistPhoneController.text : null,
-      appointmentDate: _appointmentDateController.text.isNotEmpty ? _appointmentDateController.text : null,
-      appointmentTime: _appointmentTimeController.text.isNotEmpty ? _appointmentTimeController.text : null,
+      specialistName: _specialistNameController.text.isNotEmpty
+          ? _specialistNameController.text
+          : null,
+      specialistPhone: _specialistPhoneController.text.isNotEmpty
+          ? _specialistPhoneController.text
+          : null,
+      appointmentDate: _appointmentDateController.text.isNotEmpty
+          ? _appointmentDateController.text
+          : null,
+      appointmentTime: _appointmentTimeController.text.isNotEmpty
+          ? _appointmentTimeController.text
+          : null,
       // Координаты компании больше не вычисляем из ID.
       // Здесь должны использоваться только реальные координаты, если они когда-либо будут заданы.
       companyLatitude: _inquiry!.companyLatitude,
@@ -106,47 +184,37 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
     );
 
     try {
-      // updateCurrentInquiry теперь автоматически отправляет ответ на сервер для компаний
       await InquiryService.updateCurrentInquiry(updatedInquiry);
-      
+
       setState(() {
         _inquiry = updatedInquiry;
       });
-      
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ответ сохранен и отправлен на сервер')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ответ сохранен и отправлен')));
+      if (closeAfterSave) {
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (_) => const CompanyInquiriesScreen()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Ошибка при отправке ответа: ${e.toString()}')),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmitting = false;
+        });
+      }
     }
   }
 
   Future<void> _confirmAppointment() async {
-    if (_inquiry == null) return;
-
-    final updatedInquiry = _inquiry!.copyWith(
-      appointmentConfirmed: true,
-    );
-
-    await InquiryService.updateCurrentInquiry(updatedInquiry);
-    
-    setState(() {
-      _inquiry = updatedInquiry;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Запись подтверждена')),
-    );
-    
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(builder: (_) => const CompanyInquiriesScreen()),
-      (route) => false,
-    );
+    await _saveResponse();
   }
 
   @override
@@ -166,9 +234,7 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
-      return Scaffold(
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
     if (_inquiry == null) {
@@ -178,17 +244,28 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
       );
     }
 
+    final companyName =
+        (_companyProfile?['title'] ?? _inquiry!.companyName ?? 'Компания')
+            .toString();
+    final website =
+        (_companyProfile?['site_url'] ?? _companyProfile?['siteUrl'] ?? '')
+            .toString();
+    final email = (_companyProfile?['email'] ?? '').toString();
+    final phone =
+        (_companyProfile?['phone_number'] ?? _companyProfile?['phone'] ?? '')
+            .toString();
+    final companyRatingRaw =
+        _companyProfile?['average_grade'] ?? _companyProfile?['averageGrade'];
+    final companyRating = companyRatingRaw is num
+        ? companyRatingRaw.toDouble()
+        : double.tryParse(companyRatingRaw?.toString() ?? '') ?? 0.0;
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 2.5,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 2.5)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -240,21 +317,40 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.local_car_wash, color: Colors.red, size: 24),
+                        const Icon(
+                          Icons.local_car_wash,
+                          color: Colors.red,
+                          size: 24,
+                        ),
                         const SizedBox(width: 8),
-                        const Text(
-                          'Реактор 157 a',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        Text(
+                          companyName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 8),
-                    const Text('www. Reaktor.ru'),
-                    const Text('Mail reak@bk.ru'),
-                    const Text('Тел городей линии 88000000'),
+                    if (website.isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text('www. $website'),
+                    ],
+                    if (email.isNotEmpty) Text('Mail $email'),
+                    if (phone.isNotEmpty) Text('Тел горячей линии $phone'),
                     const SizedBox(height: 8),
                     const Text('Рейтинг'),
-                    const Icon(Icons.star, color: Colors.amber, size: 24),
+                    Row(
+                      children: List.generate(5, (index) {
+                        return Icon(
+                          index < companyRating.round()
+                              ? Icons.star
+                              : Icons.star_border,
+                          color: Colors.amber,
+                          size: 20,
+                        );
+                      }),
+                    ),
                     const SizedBox(height: 8),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.end,
@@ -324,10 +420,7 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
 
               if (_inquiry!.wantsAppointmentTime) ...[
                 const Divider(height: 32),
-                const Text(
-                  'Записаться на',
-                  style: TextStyle(fontSize: 16),
-                ),
+                const Text('Записаться на', style: TextStyle(fontSize: 16)),
                 const SizedBox(height: 8),
                 TextField(
                   controller: _appointmentDateController,
@@ -348,26 +441,28 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
                 ),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: _confirmAppointment,
+                  onPressed: _isSubmitting ? null : _confirmAppointment,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                   ),
-                  child: const Text('Подтвердить запись'),
+                  child: const Text('Сохранить дату записи'),
                 ),
               ],
 
               const Divider(height: 32),
 
-              const Text(
-                'ОТВЕТ',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _responseController,
-                decoration: InputDecoration(
-                  hintText: 'Построить рейтинг',
+                const Text(
+                  'Комментарий компании',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: _responseController,
+                  decoration: InputDecoration(
+                  hintText: 'Добавьте комментарий для клиента',
                   border: OutlineInputBorder(),
                 ),
                 maxLines: 3,
@@ -376,30 +471,26 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
               TextField(
                 controller: _prepaymentController,
                 decoration: InputDecoration(
-                  hintText: 'Предоплата обязательна',
+                  labelText: 'Предоплата',
+                  hintText: _inquiry!.prepayment ?? 'Например: 500',
                   border: OutlineInputBorder(),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: List.generate(5, (index) => const Icon(Icons.star_border, color: Colors.grey)),
+                keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () async {
-                  await _saveResponse();
-                  if (!mounted) return;
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CompanyInquiriesScreen()),
-                    (route) => false,
-                  );
-                },
+                onPressed: _isSubmitting
+                    ? null
+                    : () => _saveResponse(closeAfterSave: true),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
                 ),
-                child: const Text('Отправить ответ'),
+                child: Text(
+                  _existingOrder == null ? 'Отправить ответ' : 'Обновить ответ',
+                ),
               ),
             ],
           ),
@@ -409,12 +500,28 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
   }
 
+  String? _formatOrderDate(dynamic rawDate, String? fallback) {
+    if (rawDate == null) return fallback;
+    try {
+      final date = DateTime.parse(rawDate.toString());
+      return '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year}';
+    } catch (_) {
+      return fallback;
+    }
+  }
+
+  String? _formatOrderTime(dynamic rawDate, String? fallback) {
+    if (rawDate == null) return fallback;
+    try {
+      final date = DateTime.parse(rawDate.toString());
+      return '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (_) {
+      return fallback;
+    }
+  }
 }
 
 class _PersonIconPainter extends CustomPainter {
@@ -425,11 +532,7 @@ class _PersonIconPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width / 2, headRadius), headRadius, paint);
 
     final bodyWidth = size.width * 0.7;
     final bodyHeight = size.height * 0.5;

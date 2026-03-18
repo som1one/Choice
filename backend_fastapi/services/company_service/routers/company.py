@@ -18,6 +18,29 @@ import uuid
 
 router = APIRouter(prefix="/api/company", tags=["company"])
 
+
+def _normalize_radius_meters(search_radius: int | None) -> int:
+    """Нормализует радиус поиска в метры.
+
+    Исторически он приходил то в км (5/10/20/50), то в метрах.
+    Для нулевых/битых значений используем безопасный дефолт 20 км,
+    чтобы активные заявки не пропадали из выдачи.
+    """
+    radius = search_radius or 0
+    if radius <= 0:
+        return 20_000
+    return radius * 1000 if radius <= 100 else radius
+
+
+def _parse_coordinates(raw: str | None) -> tuple[float, float] | None:
+    if not raw:
+        return None
+    try:
+        lat, lng = map(float, raw.split(","))
+        return lat, lng
+    except (ValueError, AttributeError):
+        return None
+
 @router.get("/getAll", response_model=list[CompanyDetailsResponse])
 async def get_all_companies(
     db: Session = Depends(get_db),
@@ -702,9 +725,25 @@ async def get_order_requests(
     # Фильтруем по радиусу (расстояние между компанией и клиентом)
     requests_in_radius = []
     company_coords = company.coordinates
+    def _is_legacy_default_coords(value: str | None) -> bool:
+        if not value:
+            return True
+        normalized = value.replace(" ", "")
+        return normalized in {"55.7558,37.6173", "55.755800,37.617300"}
+
+    # Автовосстановление координат, если в базе остались старые заглушки
+    if _is_legacy_default_coords(company_coords):
+        try:
+            company.coordinates = await geocode(company.city, company.street)
+            db.commit()
+            company_coords = company.coordinates
+        except Exception:
+            pass
     
     if not company_coords:
-        return []
+        company_coords_parsed = None
+    else:
+        company_coords_parsed = _parse_coordinates(company_coords)
     
     def haversine_distance(lat1, lon1, lat2, lon2):
         """Вычисление расстояния между двумя точками в метрах"""
@@ -720,23 +759,41 @@ async def get_order_requests(
         # Получаем клиента заявки по ID (client_id - это Integer)
         client = db.query(Client).filter(Client.id == req.client_id).first()
         
-        if not client or not client.coordinates:
+        if not client:
+            continue
+        if _is_legacy_default_coords(client.coordinates):
+            try:
+                client.coordinates = await geocode(client.city, client.street)
+                db.commit()
+            except Exception:
+                pass
+        client_coords_parsed = _parse_coordinates(client.coordinates)
+        if client_coords_parsed is None:
+            setattr(req, "client_guid", str(client.guid))
+            requests_in_radius.append(req)
             continue
         
         # Вычисляем расстояние между компанией и клиентом
         try:
-            # Парсим координаты (формат: "lat,lng")
-            company_lat, company_lng = map(float, company_coords.split(','))
-            client_lat, client_lng = map(float, client.coordinates.split(','))
-            
+            if company_coords_parsed is None:
+                setattr(req, "client_guid", str(client.guid))
+                requests_in_radius.append(req)
+                continue
+
+            company_lat, company_lng = company_coords_parsed
+            client_lat, client_lng = client_coords_parsed
+
             distance = haversine_distance(company_lat, company_lng, client_lat, client_lng)
-            
+
+            radius_meters = _normalize_radius_meters(req.search_radius)
+
             # Проверяем, что расстояние меньше или равно радиусу поиска заявки
-            if distance <= req.search_radius:
+            if distance <= radius_meters:
+                setattr(req, "client_guid", str(client.guid))
                 requests_in_radius.append(req)
         except (ValueError, AttributeError):
-            # Если не удалось вычислить расстояние, пропускаем заявку
-            continue
+            setattr(req, "client_guid", str(client.guid))
+            requests_in_radius.append(req)
     
     return requests_in_radius
 

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
-import '../services/remote_company_service.dart';
-import '../services/remote_ordering_service.dart';
+import '../services/api_config.dart';
 import '../services/remote_chat_service.dart';
+import '../services/remote_ordering_service.dart';
 import '../services/remote_review_service.dart';
 import '../utils/auth_guard.dart';
-import 'chats_screen.dart';
+import 'chat_screen.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final Map<String, dynamic> company;
@@ -25,9 +25,9 @@ class CompanyDetailScreen extends StatefulWidget {
 
 class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   final TextEditingController _clientResponseController = TextEditingController();
-  DateTime? _selectedEnrollmentDate;
   String? _selectedEnrollmentTime;
   bool _isLoading = false;
+  final RemoteChatService _chatService = RemoteChatService();
 
   @override
   void dispose() {
@@ -36,7 +36,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   }
 
   Future<void> _confirmBooking() async {
-    if (_selectedEnrollmentDate == null || _selectedEnrollmentTime == null) {
+    if (_selectedEnrollmentTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Выберите дату и время записи')),
       );
@@ -50,13 +50,27 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     try {
       final orderId = widget.order['id'] ?? widget.order['orderId'];
       if (orderId != null) {
-        // Подтверждаем запись
         final orderingService = RemoteOrderingService();
         await orderingService.confirmEnrollmentDate(orderId);
+
+        final clientComment = _clientResponseController.text.trim();
+        final companyId = widget.company['guid'] ?? widget.company['id'];
+        if (clientComment.isNotEmpty && companyId != null) {
+          await _chatService.sendMessage(
+            text: clientComment,
+            receiverId: companyId.toString(),
+          );
+        }
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Запись подтверждена')),
+            SnackBar(
+              content: Text(
+                clientComment.isEmpty
+                    ? 'Запись подтверждена'
+                    : 'Запись подтверждена, пожелание отправлено в чат',
+              ),
+            ),
           );
         }
       }
@@ -78,13 +92,16 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   Future<void> _startChat() async {
     final companyId = widget.company['guid'] ?? widget.company['id'];
     if (companyId == null) return;
-
-    // Открываем чат с компанией
-    // TODO: Реализовать открытие чата с конкретной компанией по ID
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => const ChatsScreen(),
+        builder: (context) => ChatScreen(
+          userId: companyId.toString(),
+          userName:
+              (widget.company['title'] ?? widget.company['name'] ?? 'Компания')
+                  .toString(),
+          userIconUri: _resolveCompanyIconUri(),
+        ),
       ),
     );
   }
@@ -103,15 +120,20 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     final website = company['site_url'] ?? company['website'] ?? '';
     final email = company['email'] ?? '';
     final phone = company['phone_number'] ?? company['phone'] ?? '';
-    final rating = (company['average_grade'] ?? company['rating'] as num?)?.toDouble() ?? 0.0;
-    // Услуги нужно получать из API, пока используем пустой список
-    final services = <String>[]; // TODO: Загрузить из /api/company-services
-    
+    final ratingRaw = company['average_grade'] ?? company['averageGrade'] ?? company['rating'];
+    final rating = ratingRaw is num
+        ? ratingRaw.toDouble()
+        : double.tryParse(ratingRaw?.toString() ?? '') ?? 0.0;
+    final services = _extractServices(company);
+
     final price = order['price'] ?? 0;
     final deadline = order['deadline'] ?? 0;
-    final specialistName = order['specialist_name'] ?? '';
-    final specialistPhone = order['specialist_phone'] ?? '';
-    final enrollmentDate = order['enrollment_date'];
+    final responseText =
+        (order['response_text'] ?? order['responseText'] ?? '').toString();
+    final specialistName =
+        (order['specialist_name'] ?? order['specialistName'] ?? '').toString();
+    final specialistPhone =
+        (order['specialist_phone'] ?? order['specialistPhone'] ?? '').toString();
     final prepayment = order['prepayment'] ?? 0;
     final requiresPrepayment = prepayment > 0;
 
@@ -261,31 +283,26 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Услуги:',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
+                        if (services.isNotEmpty) ...[
+                          const Text(
+                            'Услуги:',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                        const SizedBox(height: 8),
-                        ...services.take(5).map((service) => Padding(
-                          padding: const EdgeInsets.only(bottom: 4),
-                          child: Text('• $service', style: const TextStyle(fontSize: 12)),
-                        )),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Icon(Icons.camera_alt, color: Colors.blue, size: 20),
-                            const SizedBox(width: 8),
-                            Icon(Icons.camera_alt, color: Colors.pink, size: 20),
-                            const SizedBox(width: 8),
-                            Icon(Icons.send, color: Colors.blue, size: 20),
-                          ],
-                        ),
+                          const SizedBox(height: 8),
+                          ...services.take(5).map((service) => Padding(
+                            padding: const EdgeInsets.only(bottom: 4),
+                            child: Text(
+                              '• $service',
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          )),
+                          const SizedBox(height: 12),
+                        ],
                         // Соцсети
                         if (_hasSocialNetworks(company)) ...[
-                          const SizedBox(height: 12),
                           _buildSocialNetworks(company),
                         ],
                       ],
@@ -311,6 +328,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                   const SizedBox(height: 12),
                   Text('Цена $price', style: const TextStyle(fontSize: 14)),
                   Text('Срок $deadline ${_getDeadlineUnit(deadline)}', style: const TextStyle(fontSize: 14)),
+                  if (responseText.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Text(responseText, style: const TextStyle(fontSize: 14)),
+                  ],
                   if (specialistName.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text('Имя специалиста $specialistName', style: const TextStyle(fontSize: 14)),
@@ -407,29 +428,17 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Предоплата обязательна',
-                      style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          // TODO: Реализовать оплату предоплаты
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Оплата предоплаты')),
-                          );
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.green,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                        child: const Text(
-                          'Сделать предоплату',
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ),
+                    Text(
+                      'Сумма предоплаты: $prepayment. Оплата внутри приложения пока не подключена, сумму нужно согласовать с компанией в чате.',
+                      style: const TextStyle(fontSize: 13, color: Colors.black87),
                     ),
                   ],
                 ),
@@ -464,14 +473,47 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          // TODO: Реализовать редактирование
-        },
-        backgroundColor: Colors.purple[200],
-        child: Icon(Icons.edit, color: Colors.purple[800]),
-      ),
     );
+  }
+
+  String? _resolveCompanyIconUri() {
+    final iconUri = widget.company['icon_uri'] ?? widget.company['iconUri'];
+    if (iconUri == null) return null;
+    final raw = iconUri.toString().trim();
+    if (raw.isEmpty) return null;
+    if (raw.startsWith('http://') || raw.startsWith('https://')) {
+      return raw;
+    }
+    return '${ApiConfig.fileBaseUrl}/api/objects/$raw';
+  }
+
+  List<String> _extractServices(Map<String, dynamic> company) {
+    final rawList =
+        company['services'] ??
+        company['company_services'] ??
+        company['companyServices'];
+    if (rawList is List) {
+      return rawList
+          .map((item) {
+            if (item is Map<String, dynamic>) {
+              return (item['title'] ?? item['name'] ?? '').toString().trim();
+            }
+            return item.toString().trim();
+          })
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+
+    final activities = company['activities']?.toString().trim();
+    if (activities != null && activities.isNotEmpty) {
+      return activities
+          .split(',')
+          .map((item) => item.trim())
+          .where((item) => item.isNotEmpty)
+          .toList();
+    }
+
+    return const <String>[];
   }
 
   void _selectEnrollmentDate(String dateTime) {
@@ -612,12 +654,16 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                     itemCount: companyReviews.length,
                   itemBuilder: (context, index) {
                     final review = companyReviews[index];
-                    // В ответе бэкенда используется 'grade', а не 'rating'
-                    final grade = (review['grade'] as num?)?.toInt() ?? 0;
+                    final gradeRaw = review['grade'];
+                    final grade = gradeRaw is num
+                        ? gradeRaw.toInt()
+                        : int.tryParse(gradeRaw?.toString() ?? '') ?? 0;
                     final text = review['text'] ?? review['comment'] ?? '';
-                    // sender_id - это ID клиента, который оставил отзыв
                     final senderId = review['sender_id'] ?? '';
-                    final clientName = 'Клиент $senderId'; // TODO: Загрузить имя клиента
+                    final clientName = _formatReviewerLabel(
+                      prefix: 'Клиент',
+                      rawId: senderId,
+                    );
 
                     return Card(
                       margin: const EdgeInsets.only(bottom: 8),
@@ -676,17 +722,28 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     if (enrollmentDateStr != null) {
       try {
         final date = DateTime.parse(enrollmentDateStr);
-        // Генерируем несколько вариантов времени
         availableDates = [
           '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
         ];
       } catch (_) {
-        // Если не удалось распарсить, используем дефолтные значения
-        availableDates = ['22.11.2021 10-30', '22.11.2021 14-00'];
+        availableDates = [];
       }
-    } else {
-      // Дефолтные значения
-      availableDates = ['22.11.2021 10-30', '22.11.2021 14-00'];
+    }
+
+    if (availableDates.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.grey.shade300),
+        ),
+        child: const Text(
+          'Компания еще не предложила дату записи. Уточните детали в чате.',
+          style: TextStyle(fontSize: 13),
+        ),
+      );
     }
 
     return Row(
@@ -720,7 +777,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
               ),
             ),
           );
-        }).toList(),
+        }),
         Expanded(
           child: ElevatedButton(
             onPressed: _isLoading ? null : _confirmBooking,
@@ -744,6 +801,13 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       size: const Size(24, 24),
       painter: _PersonIconPainter(),
     );
+  }
+
+  String _formatReviewerLabel({required String prefix, required Object? rawId}) {
+    final normalized = rawId?.toString().trim() ?? '';
+    if (normalized.isEmpty) return prefix;
+    if (normalized.length <= 8) return '$prefix $normalized';
+    return '$prefix ${normalized.substring(0, 8)}';
   }
 }
 

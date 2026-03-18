@@ -28,7 +28,7 @@ class ApiClient {
       showApiError(ctx, error);
     } else {
       // Если context недоступен, просто логируем ошибку
-      print('API Error: $error');
+      debugPrint('API Error: $error');
     }
   }
 
@@ -52,17 +52,17 @@ class ApiClient {
     bool throwOnError = false,
   }) async {
     if (!ApiConfig.isConfigured) {
-      print('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
+      debugPrint('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
       return null;
     }
     try {
       final uri = _uri(baseUrl, path);
-      print('API Request: GET $uri');
+      debugPrint('API Request: GET $uri');
       final response = await http.get(
         uri,
         headers: await _headers(),
       ).timeout(_timeout);
-      print('API Response: ${response.statusCode} for $uri');
+      debugPrint('API Response: ${response.statusCode} for $uri');
       
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final exception = ApiException.fromResponse(response.statusCode, response.body);
@@ -85,7 +85,7 @@ class ApiClient {
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
     } on TimeoutException catch (e) {
-      print('API Timeout Error (GET): ${e.message} for $baseUrl$path');
+      debugPrint('API Timeout Error (GET): ${e.message} for $baseUrl$path');
       final exception = ApiException.timeout();
       if (throwOnError) {
         throw exception;
@@ -93,7 +93,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on http.ClientException catch (e) {
-      print('API Network Error (GET): ${e.message} for $baseUrl$path');
+      debugPrint('API Network Error (GET): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
       if (throwOnError) {
         throw exception;
@@ -101,7 +101,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on SocketException catch (e) {
-      print('API Socket Error (GET): ${e.message} for $baseUrl$path');
+      debugPrint('API Socket Error (GET): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
@@ -109,7 +109,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on FormatException catch (e) {
-      print('API Format Error (GET): ${e.message} for $baseUrl$path');
+      debugPrint('API Format Error (GET): ${e.message} for $baseUrl$path');
       final exception = ApiException(
         statusCode: 0,
         message: 'Invalid response format',
@@ -121,7 +121,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
-      print('API Unknown Error (GET): $e for $baseUrl$path');
+      debugPrint('API Unknown Error (GET): $e for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -143,13 +143,13 @@ class ApiClient {
     bool throwOnError = false,}
   ) async {
     if (!ApiConfig.isConfigured) {
-      print('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
+      debugPrint('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
       return null;
     }
     try {
       final uri = _uri(baseUrl, path);
-      print('API Request: POST $uri');
-      print('API Request Body: ${jsonEncode(body)}');
+      debugPrint('API Request: POST $uri');
+      debugPrint('API Request Body: ${jsonEncode(body)}');
       final response = await http
           .post(
             uri,
@@ -157,7 +157,7 @@ class ApiClient {
             body: jsonEncode(body),
           )
           .timeout(_timeout);
-      print('API Response: ${response.statusCode} for $uri');
+      debugPrint('API Response: ${response.statusCode} for $uri');
       
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final exception = ApiException.fromResponse(response.statusCode, response.body);
@@ -180,7 +180,7 @@ class ApiClient {
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
     } on TimeoutException catch (e) {
-      print('API Timeout Error (POST): ${e.message} for $baseUrl$path');
+      debugPrint('API Timeout Error (POST): ${e.message} for $baseUrl$path');
       final exception = ApiException.timeout();
       if (throwOnError) {
         throw exception;
@@ -188,7 +188,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on http.ClientException catch (e) {
-      print('API Network Error (POST): ${e.message} for $baseUrl$path');
+      debugPrint('API Network Error (POST): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
       if (throwOnError) {
         throw exception;
@@ -196,7 +196,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on SocketException catch (e) {
-      print('API Socket Error (POST): ${e.message} for $baseUrl$path');
+      debugPrint('API Socket Error (POST): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
@@ -204,7 +204,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on FormatException catch (e) {
-      print('API Format Error (POST): ${e.message} for $baseUrl$path');
+      debugPrint('API Format Error (POST): ${e.message} for $baseUrl$path');
       final exception = ApiException(
         statusCode: 0,
         message: 'Invalid response format',
@@ -216,7 +216,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
-      print('API Unknown Error (POST): $e (${e.runtimeType}) for $baseUrl$path');
+      debugPrint('API Unknown Error (POST): $e (${e.runtimeType}) for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -239,13 +239,13 @@ class ApiClient {
     bool throwOnError = false,}
   ) async {
     if (!ApiConfig.isConfigured) {
-      print('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
+      debugPrint('API Error: API not configured (useRemoteApi: ${ApiConfig.useRemoteApi}, host: ${ApiConfig.host})');
       return null;
     }
     try {
       final uri = _uri(baseUrl, path);
-      print('API Request: PUT $uri');
-      print('API Request Body: ${jsonEncode(body)}');
+      debugPrint('API Request: PUT $uri');
+      debugPrint('API Request Body: ${jsonEncode(body)}');
       final defaultHeaders = await _headers();
       if (headers != null) {
         defaultHeaders.addAll(headers);
@@ -257,7 +257,7 @@ class ApiClient {
             body: jsonEncode(body),
           )
           .timeout(_timeout);
-      print('API Response: ${response.statusCode} for $uri');
+      debugPrint('API Response: ${response.statusCode} for $uri');
       
       if (response.statusCode < 200 || response.statusCode >= 300) {
         final exception = ApiException.fromResponse(response.statusCode, response.body);
@@ -280,7 +280,7 @@ class ApiClient {
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
     } on TimeoutException catch (e) {
-      print('API Timeout Error (DELETE): ${e.message} for $baseUrl$path');
+      debugPrint('API Timeout Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException.timeout();
       if (throwOnError) {
         throw exception;
@@ -288,7 +288,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on http.ClientException catch (e) {
-      print('API Network Error (DELETE): ${e.message} for $baseUrl$path');
+      debugPrint('API Network Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
       if (throwOnError) {
         throw exception;
@@ -296,7 +296,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on SocketException catch (e) {
-      print('API Socket Error (DELETE): ${e.message} for $baseUrl$path');
+      debugPrint('API Socket Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
@@ -304,7 +304,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on FormatException catch (e) {
-      print('API Format Error (DELETE): ${e.message} for $baseUrl$path');
+      debugPrint('API Format Error (DELETE): ${e.message} for $baseUrl$path');
       final exception = ApiException(
         statusCode: 0,
         message: 'Invalid response format',
@@ -316,7 +316,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
-      print('API Unknown Error (DELETE): $e (${e.runtimeType}) for $baseUrl$path');
+      debugPrint('API Unknown Error (DELETE): $e (${e.runtimeType}) for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -366,7 +366,7 @@ class ApiClient {
       final decoded = jsonDecode(response.body);
       return decoded is Map<String, dynamic> ? decoded : <String, dynamic>{'data': decoded};
     } on TimeoutException catch (e) {
-      print('API Timeout Error (PUT): ${e.message} for $baseUrl$path');
+      debugPrint('API Timeout Error (PUT): ${e.message} for $baseUrl$path');
       final exception = ApiException.timeout();
       if (throwOnError) {
         throw exception;
@@ -374,7 +374,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on http.ClientException catch (e) {
-      print('API Network Error (PUT): ${e.message} for $baseUrl$path');
+      debugPrint('API Network Error (PUT): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError(e.message);
       if (throwOnError) {
         throw exception;
@@ -382,7 +382,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on SocketException catch (e) {
-      print('API Socket Error (PUT): ${e.message} for $baseUrl$path');
+      debugPrint('API Socket Error (PUT): ${e.message} for $baseUrl$path');
       final exception = ApiException.networkError('Socket error: ${e.message}');
       if (throwOnError) {
         throw exception;
@@ -390,7 +390,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } on FormatException catch (e) {
-      print('API Format Error (PUT): ${e.message} for $baseUrl$path');
+      debugPrint('API Format Error (PUT): ${e.message} for $baseUrl$path');
       final exception = ApiException(
         statusCode: 0,
         message: 'Invalid response format',
@@ -402,7 +402,7 @@ class ApiClient {
       _showError(exception);
       return null;
     } catch (e) {
-      print('API Unknown Error (PUT): $e for $baseUrl$path');
+      debugPrint('API Unknown Error (PUT): $e for $baseUrl$path');
       if (e is ApiException) {
         if (throwOnError) rethrow;
         _showError(e);
@@ -419,14 +419,15 @@ class ApiClient {
 
   /// Обработка ошибки 401 - очистка токена и перенаправление на экран входа
   static Future<void> _handleUnauthorized() async {
+    final navigator = navigatorKey?.currentState;
+
     // Очищаем токен
     await AuthTokenStore.clearToken();
     await AuthService.logout();
     
     // Перенаправляем на экран входа
-    final context = navigatorKey?.currentContext;
-    if (context != null) {
-      Navigator.of(context).pushAndRemoveUntil(
+    if (navigator != null) {
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => const WelcomeScreen()),
         (route) => false,
       );

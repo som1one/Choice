@@ -99,6 +99,8 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
       );
     }
 
+    final companyName = (_inquiry!.companyName ?? 'Компания').trim();
+
     return Scaffold(
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
@@ -164,31 +166,9 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
                         const Icon(Icons.local_car_wash, color: Colors.red, size: 24),
                         const SizedBox(width: 8),
                         Text(
-                          _inquiry!.companyName ?? 'Реактор 157 a',
+                          companyName.isEmpty ? 'Компания' : companyName,
                           style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('www. Reaktor.ru'),
-                    const Text('Mail reak@bk.ru'),
-                    const Text('Тел городей линии 88000000'),
-                    const SizedBox(height: 8),
-                    const Text('Рейтинг'),
-                    const Icon(Icons.star, color: Colors.amber, size: 24),
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        const Icon(Icons.thumb_up, color: Colors.blue),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.camera_alt, color: Colors.grey),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.share, color: Colors.pink),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.message, color: Colors.blue),
-                        const SizedBox(width: 16),
-                        const Icon(Icons.camera_alt_outlined, color: Colors.grey),
                       ],
                     ),
                   ],
@@ -326,19 +306,6 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
                 const Divider(height: 32),
               ],
 
-              ElevatedButton(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Связь с клиентом')),
-                  );
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-                child: const Text('Связаться с клиентом'),
-              ),
-              const SizedBox(height: 16),
               // Кнопка для просмотра компании на карте
               if (_inquiry!.companyLatitude != null && _inquiry!.companyLongitude != null)
                 ElevatedButton(

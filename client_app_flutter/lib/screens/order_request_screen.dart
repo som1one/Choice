@@ -21,6 +21,7 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   late TextEditingController _descriptionController;
   late bool _toKnowPrice;
   late bool _toKnowDeadline;
+  late bool _toKnowSpecialist;
   late bool _toKnowEnrollmentDate;
   late double _radiusKm;
   late List<String> _photoUris;
@@ -35,6 +36,7 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     _descriptionController = TextEditingController(text: _orderRequest.description);
     _toKnowPrice = _orderRequest.toKnowPrice;
     _toKnowDeadline = _orderRequest.toKnowDeadline;
+    _toKnowSpecialist = _orderRequest.toKnowSpecialist;
     _toKnowEnrollmentDate = _orderRequest.toKnowEnrollmentDate;
     _radiusKm = _orderRequest.searchRadius / 1000.0;
     _photoUris = List<String>.from(_orderRequest.photoUris);
@@ -55,7 +57,12 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
 
   bool get _isFormValid {
     if (_descriptionController.text.trim().isEmpty) return false;
-    if (!_toKnowPrice && !_toKnowDeadline && !_toKnowEnrollmentDate) return false;
+    if (!_toKnowPrice &&
+        !_toKnowDeadline &&
+        !_toKnowSpecialist &&
+        !_toKnowEnrollmentDate) {
+      return false;
+    }
     return true;
   }
 
@@ -130,6 +137,7 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
         searchRadius: (_radiusKm * 1000).toInt(),
         toKnowPrice: _toKnowPrice,
         toKnowDeadline: _toKnowDeadline,
+        toKnowSpecialist: _toKnowSpecialist,
         toKnowEnrollmentDate: _toKnowEnrollmentDate,
         photoUris: photoUrisToSend,
       );
@@ -343,6 +351,17 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
                   (value) {
                     if (_canEdit) {
                       setState(() => _toKnowDeadline = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 10),
+                _buildCheckbox(
+                  'Узнать имя специалиста',
+                  _toKnowSpecialist,
+                  _canEdit && _orderRequest.toKnowSpecialist,
+                  (value) {
+                    if (_canEdit) {
+                      setState(() => _toKnowSpecialist = value);
                     }
                   },
                 ),
