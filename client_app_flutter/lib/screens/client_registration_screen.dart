@@ -5,26 +5,29 @@ import 'company_registration_screen.dart';
 import 'category_screen.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_guard.dart';
+import '../utils/auth_input_validator.dart';
 
 class ClientRegistrationScreen extends StatefulWidget {
   const ClientRegistrationScreen({super.key});
 
   @override
-  State<ClientRegistrationScreen> createState() => _ClientRegistrationScreenState();
+  State<ClientRegistrationScreen> createState() =>
+      _ClientRegistrationScreenState();
 }
 
 class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _confirmPasswordController = TextEditingController();
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
-  
+
   bool _emailError = false;
   bool _emailValidationError = false;
   bool _weakPasswordError = false;
   bool _passwordsNotMatchedError = false;
-  
+
   String _selectedCity = 'Омск';
   final List<String> _cities = [
     'Москва',
@@ -62,8 +65,9 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   void _validateFields() {
     // Валидация email
     if (_emailController.text.isNotEmpty) {
-      final emailRegex = RegExp(r'^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$');
-      _emailValidationError = !emailRegex.hasMatch(_emailController.text);
+      _emailValidationError = !AuthInputValidator.isValidEmail(
+        _emailController.text,
+      );
     } else {
       _emailValidationError = false;
     }
@@ -77,7 +81,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
 
     // Проверка совпадения паролей
     if (_confirmPasswordController.text.isNotEmpty) {
-      _passwordsNotMatchedError = _passwordController.text != _confirmPasswordController.text;
+      _passwordsNotMatchedError =
+          _passwordController.text != _confirmPasswordController.text;
     } else {
       _passwordsNotMatchedError = false;
     }
@@ -98,25 +103,26 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         !_passwordsNotMatchedError;
   }
 
-
   Future<void> _validateAndRegister() async {
     if (!_isFormValid()) {
       if (!_areAllFieldsFilled()) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Заполните все поля')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Заполните все поля')));
       } else if (_emailValidationError) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Введите корректный email')),
         );
       } else if (_weakPasswordError) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароль должен содержать минимум 8 символов')),
+          const SnackBar(
+            content: Text('Пароль должен содержать минимум 8 символов'),
+          ),
         );
       } else if (_passwordsNotMatchedError) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Пароли не совпадают')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Пароли не совпадают')));
       }
       return;
     }
@@ -134,8 +140,8 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         password: _passwordController.text,
         city: _selectedCity,
         street: '-',
-        phoneNumber: _phoneController.text.trim().isNotEmpty 
-            ? _phoneController.text.trim() 
+        phoneNumber: _phoneController.text.trim().isNotEmpty
+            ? _phoneController.text.trim()
             : '0000000000',
       );
       // Автоматически переходим на главный экран после регистрации
@@ -150,11 +156,12 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         _emailError = true;
       });
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Ошибка регистрации. Email уже используется')),
+        const SnackBar(
+          content: Text('Ошибка регистрации. Email уже используется'),
+        ),
       );
     }
   }
-
 
   @override
   void dispose() {
@@ -178,12 +185,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 2.5,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 2.5)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -193,11 +195,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  Icon(
-                    Icons.check,
-                    color: Colors.lightBlue[300],
-                    size: 28,
-                  ),
+                  Icon(Icons.check, color: Colors.lightBlue[300], size: 28),
                   Positioned(
                     top: -2,
                     right: -2,
@@ -302,7 +300,9 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                     SizedBox(
                       width: MediaQuery.of(context).size.width * 0.52,
                       child: Text(
-                        _emailError ? 'E-mail уже используется' : 'Введите корректный E-mail',
+                        _emailError
+                            ? 'E-mail уже используется'
+                            : 'Введите корректный E-mail',
                         style: const TextStyle(
                           color: Color(0xFFE64646),
                           fontWeight: FontWeight.w400,
@@ -314,7 +314,11 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_passwordController, 'Пароль минимум 8 знаков', isPassword: true),
+                    child: _buildTextField(
+                      _passwordController,
+                      'Пароль минимум 8 знаков',
+                      isPassword: true,
+                    ),
                   ),
                   if (_weakPasswordError) ...[
                     const SizedBox(height: 5),
@@ -333,7 +337,11 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildTextField(_confirmPasswordController, 'Повторить пароль', isPassword: true),
+                    child: _buildTextField(
+                      _confirmPasswordController,
+                      'Повторить пароль',
+                      isPassword: true,
+                    ),
                   ),
                   if (_passwordsNotMatchedError) ...[
                     const SizedBox(height: 5),
@@ -380,7 +388,11 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
     );
   }
 
-  Widget _buildTextField(TextEditingController controller, String hint, {bool isPassword = false}) {
+  Widget _buildTextField(
+    TextEditingController controller,
+    String hint, {
+    bool isPassword = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Container(
@@ -417,7 +429,10 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
             ),
             filled: true,
             fillColor: Colors.transparent,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -445,8 +460,12 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => CompanyRegistrationScreen(
-                      email: _emailController.text.isNotEmpty ? _emailController.text : null,
-                      password: _passwordController.text.isNotEmpty ? _passwordController.text : null,
+                      email: _emailController.text.isNotEmpty
+                          ? _emailController.text
+                          : null,
+                      password: _passwordController.text.isNotEmpty
+                          ? _passwordController.text
+                          : null,
                     ),
                   ),
                 );
@@ -494,10 +513,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
                   'Выберите город',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
               Expanded(
@@ -525,10 +541,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
   }
 }
 
@@ -541,11 +554,7 @@ class _PersonIconPainter extends CustomPainter {
 
     // Рисуем голову (круг)
     final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width / 2, headRadius), headRadius, paint);
 
     // Рисуем тело (прямоугольник с вогнутой нижней частью - две "ножки")
     final bodyWidth = size.width * 0.7;
