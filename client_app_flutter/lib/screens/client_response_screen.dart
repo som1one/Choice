@@ -5,6 +5,9 @@ import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'map_search_screen.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class ClientResponseScreen extends StatefulWidget {
   const ClientResponseScreen({super.key});
@@ -118,11 +121,7 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: const Text(
               'Омск',
@@ -329,10 +328,7 @@ class _ClientResponseScreenState extends State<ClientResponseScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 }
 

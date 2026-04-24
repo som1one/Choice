@@ -9,7 +9,6 @@ import '../services/auth_token_store.dart';
 import '../utils/auth_guard.dart';
 import 'change_password_screen.dart';
 import 'welcome_screen.dart';
-import 'package:file_picker/file_picker.dart';
 import '../services/remote_file_service.dart';
 
 class AccountScreen extends StatefulWidget {

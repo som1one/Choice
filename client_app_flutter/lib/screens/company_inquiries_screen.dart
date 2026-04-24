@@ -5,8 +5,12 @@ import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/remote_ordering_service.dart';
 import '../utils/auth_guard.dart';
+import '../utils/order_state.dart';
 import 'client_inquiry_screen.dart';
 import 'company_client_detail_screen.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanyInquiriesScreen extends StatefulWidget {
   const CompanyInquiriesScreen({super.key});
@@ -20,6 +24,7 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
   Map<int, Map<String, dynamic>> _ordersByRequestId = {};
   bool _isLoading = true;
   bool _showOnlyPending = true;
+  String? _errorMessage;
 
   @override
   void initState() {
@@ -28,26 +33,42 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
   }
 
   Future<void> _loadInquiries() async {
-    final allInquiries = await InquiryService.getAllInquiries();
-    final orders = await RemoteOrderingService().getOrders();
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
 
-    allInquiries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    final ordersByRequestId = <int, Map<String, dynamic>>{};
-    if (orders != null) {
-      for (final order in orders) {
-        final rawId = order['order_request_id'] ?? order['orderRequestId'];
-        final requestId = rawId is num ? rawId.toInt() : int.tryParse(rawId?.toString() ?? '');
-        if (requestId != null) {
-          ordersByRequestId[requestId] = order;
+    try {
+      final allInquiries = await InquiryService.getAllInquiries();
+      final orders = await RemoteOrderingService().getOrders();
+
+      allInquiries.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+      final ordersByRequestId = <int, Map<String, dynamic>>{};
+      if (orders != null) {
+        for (final order in orders) {
+          final rawId = order['order_request_id'] ?? order['orderRequestId'];
+          final requestId = rawId is num
+              ? rawId.toInt()
+              : int.tryParse(rawId?.toString() ?? '');
+          if (requestId != null) {
+            ordersByRequestId[requestId] = order;
+          }
         }
       }
-    }
 
-    setState(() {
-      _allInquiries = allInquiries;
-      _ordersByRequestId = ordersByRequestId;
-      _isLoading = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        _allInquiries = allInquiries;
+        _ordersByRequestId = ordersByRequestId;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isLoading = false;
+        _errorMessage = 'Не удалось загрузить заявки';
+      });
+    }
   }
 
   bool _isPending(InquiryModel inquiry) {
@@ -57,7 +78,7 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(size: const Size(28, 28), painter: _PersonIconPainter());
+    return const ProfileCornerIcon(userType: UserType.company, size: 30);
   }
 
   @override
@@ -78,7 +99,7 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
             elevation: 0,
             leading: const Padding(
               padding: EdgeInsets.all(8.0),
-              child: Icon(Icons.favorite, color: Colors.lightBlue, size: 32),
+              child: ChoiceLogoIcon(size: 32),
             ),
             title: const Text(
               'Заявки',
@@ -137,6 +158,33 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
           ),
           _isLoading
               ? const Center(child: CircularProgressIndicator())
+              : _errorMessage != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.cloud_off,
+                          size: 48,
+                          color: Colors.grey,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          _errorMessage!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(fontSize: 16),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: _loadInquiries,
+                          child: const Text('Повторить'),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
               : visibleInquiries.isEmpty
               ? Center(
                   child: Column(
@@ -224,12 +272,8 @@ class _CompanyInquiriesScreenState extends State<CompanyInquiriesScreen> {
                                   : _ordersByRequestId[orderRequestId];
 
                               if (relevantOrder != null) {
-                                final isConfirmed =
-                                    relevantOrder['is_date_confirmed'] == true;
-                                final isEnrolled =
-                                    relevantOrder['is_enrolled'] == true;
-
-                                if (isConfirmed || isEnrolled) {
+                                if (isOrderConfirmed(relevantOrder) ||
+                                    isOrderFinished(relevantOrder)) {
                                   await Navigator.push(
                                     context,
                                     MaterialPageRoute(

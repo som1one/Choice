@@ -37,6 +37,33 @@ def _parse_coordinates(raw: str | None) -> tuple[float, float] | None:
         return None
 
 
+def _normalize_category_ids(raw_categories) -> list[int]:
+    if raw_categories is None:
+        return []
+    if isinstance(raw_categories, list):
+        normalized = []
+        for item in raw_categories:
+            try:
+                normalized.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return normalized
+    if isinstance(raw_categories, str):
+        text = raw_categories.strip()
+        if not text:
+            return []
+        try:
+            decoded = json.loads(text)
+            if isinstance(decoded, list):
+                return _normalize_category_ids(decoded)
+        except Exception:
+            pass
+
+        parts = [part.strip() for part in text.strip("[]").split(",")]
+        return [int(part) for part in parts if part.isdigit()]
+    return []
+
+
 def _normalize_user_guid(raw: str) -> str:
     compact = (raw or "").replace("-", "")
     if len(compact) == 32:
@@ -45,6 +72,11 @@ def _normalize_user_guid(raw: str) -> str:
             f"{compact[16:20]}-{compact[20:]}"
         )
     return raw
+
+
+async def _expire_stale_requests(db: Session) -> None:
+    repo = OrderRequestRepository(db)
+    await repo.expire_stale_active_requests()
 
 
 async def _ensure_current_client(
@@ -451,6 +483,7 @@ async def send_order_request(
     current_user: dict = Depends(get_current_user)
 ):
     """Создание заявки на заказ"""
+    await _expire_stale_requests(db)
     client_repo = ClientRepository(db)
     client = await _ensure_current_client(db, current_user)
     
@@ -512,6 +545,8 @@ async def get_order_requests(
     from services.company_service.models import Company
     from services.company_service.repositories import CompanyRepository
     from common.address_service import get_distance
+
+    await _expire_stale_requests(db)
     
     repo = OrderRequestRepository(db)
     user_type = current_user.get("user_type")
@@ -571,7 +606,7 @@ async def get_order_requests(
             return []
         
         # Получаем категории компании
-        company_categories = company.categories_id or []
+        company_categories = _normalize_category_ids(company.categories_id)
         
         # Если переданы категории в параметрах, используем их (для обратной совместимости)
         if categories_id:
@@ -683,6 +718,7 @@ async def get_client_requests(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение заявок клиента"""
+    await _expire_stale_requests(db)
     client = await _ensure_current_client(db, current_user)
     
     if not client:
@@ -706,6 +742,7 @@ async def get_request(
     current_user: dict = Depends(get_current_user)
 ):
     """Получение заявки по ID"""
+    await _expire_stale_requests(db)
     repo = OrderRequestRepository(db)
     request = await repo.get(request_id)
     
@@ -734,6 +771,13 @@ async def change_order_request(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Order request not found"
+        )
+
+    current_client = await _ensure_current_client(db, current_user)
+    if not current_client or current_client.id != order_request.client_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the request owner can change the order request"
         )
     
     # Обновление данных

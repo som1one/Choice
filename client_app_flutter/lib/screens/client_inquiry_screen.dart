@@ -3,6 +3,9 @@ import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import 'company_response_screen.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class ClientInquiryScreen extends StatefulWidget {
   const ClientInquiryScreen({super.key});
@@ -61,11 +64,7 @@ class _ClientInquiryScreenState extends State<ClientInquiryScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: const Text(
               'Омск',
@@ -271,10 +270,7 @@ class _ClientInquiryScreenState extends State<ClientInquiryScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.company, size: 28);
   }
 }
 

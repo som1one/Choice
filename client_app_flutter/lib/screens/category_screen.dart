@@ -4,6 +4,8 @@ import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
 import '../services/api_exception.dart';
 import '../services/remote_client_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CategoryScreen extends StatefulWidget {
   const CategoryScreen({super.key});
@@ -15,8 +17,7 @@ class CategoryScreen extends StatefulWidget {
 class _CategoryScreenState extends State<CategoryScreen> {
   String? _city; // Загружается из API
   bool _isLoadingCity = true;
-
-  final List<String> categories = const [
+  final List<String> _categories = const [
     'Автоуслуги',
     'Услуги строителя',
     'Красота',
@@ -91,11 +92,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Text(
               _city ?? (_isLoadingCity ? 'Загрузка...' : ''),
@@ -157,9 +154,12 @@ class _CategoryScreenState extends State<CategoryScreen> {
                             mainAxisSpacing: 10,
                             childAspectRatio: 2.8,
                           ),
-                          itemCount: categories.length,
+                          itemCount: _categories.length,
                           itemBuilder: (context, index) {
-                            return _buildCategoryButton(context, categories[index]);
+                            return _buildCategoryButton(
+                              context,
+                              _categories[index],
+                            );
                           },
                         ),
                       ),
@@ -211,10 +211,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 }
 

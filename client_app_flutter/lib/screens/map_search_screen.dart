@@ -3,6 +3,9 @@ import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
 import '../utils/auth_guard.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class MapSearchScreen extends StatefulWidget {
   const MapSearchScreen({super.key});
@@ -53,14 +56,17 @@ class _MapSearchScreenState extends State<MapSearchScreen> {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 0,
-        leading: const Icon(Icons.favorite, color: Colors.blue, size: 32),
+        leading: const Padding(
+          padding: EdgeInsets.only(left: 12),
+          child: ChoiceLogoIcon(size: 30),
+        ),
         title: const Text(
           'Омск',
           style: TextStyle(color: Colors.black, fontSize: 20),
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_outline, size: 28),
+            icon: const ProfileCornerIcon(userType: UserType.client, size: 28),
             onPressed: () => AuthGuard.openClientCabinet(context),
           ),
         ],

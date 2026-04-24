@@ -1,12 +1,10 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:image_picker/image_picker.dart';
-import 'package:file_picker/file_picker.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:permission_handler/permission_handler.dart';
-import 'dart:io' show Platform;
+import 'package:speech_to_text/speech_to_text.dart';
 import 'client_view_inquiry_screen.dart';
 import '../utils/auth_guard.dart';
 import '../models/inquiry_model.dart';
@@ -14,9 +12,10 @@ import '../services/inquiry_service.dart';
 import '../services/user_profile_service.dart';
 import '../services/remote_client_service.dart';
 import '../services/auth_service.dart';
-import '../services/remote_file_service.dart';
-import '../services/api_config.dart';
 import '../services/api_exception.dart';
+import '../services/remote_file_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class ServiceQueryScreen extends StatefulWidget {
   final String category;
@@ -29,20 +28,21 @@ class ServiceQueryScreen extends StatefulWidget {
 
 class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   final TextEditingController _questionController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
+  final SpeechToText _speechToText = SpeechToText();
+  final RemoteFileService _fileService = RemoteFileService();
   bool _knowPrice = true;
   bool _knowTime = true;
   bool _knowSpecialist = true;
   bool _knowAppointment = true;
   bool _hasText = false;
-  
-  stt.SpeechToText? _speech;
-  bool _speechInitialized = false;
   bool _isListening = false;
-  bool _isLoading = false;
-  String? _attachmentPath;
-  ImagePicker? _imagePicker;
+  bool _isSending = false;
+
   String _clientName = 'Клиент';
   String? _city; // Загружается из API
+  String? _attachmentPath;
+  Uint8List? _attachmentBytes;
 
   @override
   void initState() {
@@ -123,208 +123,123 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
     }
   }
 
-  Future<void> _initializeSpeech() async {
-    if (_speechInitialized) {
+  @override
+  void dispose() {
+    _speechToText.stop();
+    _questionController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _pickAttachment() async {
+    final image = await _imagePicker.pickImage(source: ImageSource.gallery);
+    if (image == null) return;
+
+    final bytes = await image.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _attachmentPath = image.path;
+      _attachmentBytes = bytes;
+    });
+  }
+
+  Future<void> _toggleVoiceInput() async {
+    if (_isListening) {
+      await _speechToText.stop();
+      if (!mounted) return;
+      setState(() {
+        _isListening = false;
+      });
       return;
     }
 
-    _speech ??= stt.SpeechToText();
-    final available = await _speech!.initialize(
+    final available = await _speechToText.initialize(
       onStatus: (status) {
-        if (mounted) {
+        if (!mounted) return;
+        if (status == 'done' || status == 'notListening') {
           setState(() {
-            _isListening = status == 'listening';
+            _isListening = false;
           });
         }
       },
-      onError: (error) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка распознавания речи: ${error.errorMsg}')),
-          );
-        }
-      },
-    );
-    if (!available) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Голосовой ввод недоступен')),
-        );
-      }
-      return;
-    }
-    _speechInitialized = true;
-  }
-
-  Future<void> _attachFile() async {
-    try {
-      bool isMobile = false;
-      bool isAndroid = false;
-      bool isIOS = false;
-      try {
-        isAndroid = !kIsWeb && Platform.isAndroid;
-        isIOS = !kIsWeb && Platform.isIOS;
-        isMobile = isAndroid || isIOS;
-      } catch (e) {
-        isMobile = false;
-      }
-
-      // На iOS image_picker/file_picker сами показывают системные диалоги.
-      // storage permission через permission_handler там не нужен и только
-      // повышает риск нативных падений.
-      if (isAndroid) {
-        try {
-          final status = await Permission.storage.request();
-          if (!status.isGranted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('Необходимо разрешение на доступ к файлам')),
-            );
-            return;
-          }
-        } catch (e) {
-          // Игнорируем ошибки разрешений на платформах, где они не нужны
-        }
-      }
-
-      // Показываем диалог выбора типа файла
-      final result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          title: const Text('Выберите тип файла'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isMobile) ...[
-                ListTile(
-                  leading: const Icon(Icons.image),
-                  title: const Text('Фото из галереи'),
-                  onTap: () => Navigator.pop(context, 'gallery'),
-                ),
-                ListTile(
-                  leading: const Icon(Icons.camera_alt),
-                  title: const Text('Сделать фото'),
-                  onTap: () => Navigator.pop(context, 'camera'),
-                ),
-              ],
-              ListTile(
-                leading: const Icon(Icons.insert_drive_file),
-                title: const Text('Выбрать файл'),
-                onTap: () => Navigator.pop(context, 'file'),
-              ),
-            ],
-          ),
-        ),
-      );
-
-      if (result == null) return;
-
-      if (result == 'gallery' || result == 'camera') {
-        // Выбор изображения (только для мобильных платформ)
-        if (!isMobile) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Выбор фото доступен только на мобильных устройствах')),
-          );
-          return;
-        }
-        
-        try {
-          _imagePicker ??= ImagePicker();
-          final XFile? image = await _imagePicker!.pickImage(
-            source: result == 'gallery' ? ImageSource.gallery : ImageSource.camera,
-          );
-          
-          if (image != null) {
-            setState(() {
-              _attachmentPath = image.path;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Фото прикреплено: ${image.name}')),
-            );
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка при выборе фото: $e')),
-          );
-        }
-      } else if (result == 'file') {
-        // Выбор файла (работает на всех платформах)
-        try {
-          FilePickerResult? fileResult = await FilePicker.platform.pickFiles(
-            type: FileType.any,
-          );
-          
-          if (fileResult != null && fileResult.files.single.path != null) {
-            setState(() {
-              _attachmentPath = fileResult.files.single.path;
-            });
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Файл прикреплен: ${fileResult.files.single.name}')),
-            );
-          }
-        } catch (e) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Ошибка при выборе файла: $e')),
-          );
-        }
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Ошибка при прикреплении файла: $e')),
-      );
-    }
-  }
-
-  Future<void> _startListening() async {
-    if (_isListening) {
-      await _speech?.stop();
-      return;
-    }
-
-    // Запрашиваем разрешение на микрофон только для мобильных платформ
-    bool isAndroid = false;
-    try {
-      isAndroid = !kIsWeb && Platform.isAndroid;
-    } catch (e) {
-      isAndroid = false;
-    }
-
-    // На iOS speech_to_text сам инициирует системный permission flow.
-    if (isAndroid) {
-      try {
-        final status = await Permission.microphone.request();
-        if (!status.isGranted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Необходимо разрешение на использование микрофона')),
-          );
-          return;
-        }
-      } catch (e) {
-        // Игнорируем ошибки разрешений на платформах, где они не нужны
-      }
-    }
-
-    await _initializeSpeech();
-    if (!_speechInitialized) {
-      return;
-    }
-
-    await _speech!.listen(
-      onResult: (result) {
+      onError: (_) {
+        if (!mounted) return;
         setState(() {
-          _questionController.text = result.recognizedWords;
+          _isListening = false;
         });
       },
-      listenFor: const Duration(seconds: 30),
-      pauseFor: const Duration(seconds: 3),
+    );
+
+    if (!available) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Голосовой ввод недоступен на этом устройстве')),
+      );
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      _isListening = true;
+    });
+
+    await _speechToText.listen(
       localeId: 'ru_RU',
+      onResult: (result) {
+        final recognized = result.recognizedWords.trim();
+        if (recognized.isEmpty) return;
+        _questionController.value = TextEditingValue(
+          text: recognized,
+          selection: TextSelection.collapsed(offset: recognized.length),
+        );
+      },
     );
   }
 
-  @override
-  void dispose() {
-    _questionController.dispose();
-    _speech?.stop();
-    super.dispose();
+  Future<void> _sendInquiry() async {
+    final question = _questionController.text.trim();
+    if (question.isEmpty || _isSending) return;
+
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      String? attachmentUrl;
+      if (_attachmentPath != null && _attachmentPath!.isNotEmpty) {
+        attachmentUrl = await _fileService.uploadFile(_attachmentPath!);
+      }
+
+      final inquiry = InquiryModel(
+        id: InquiryService.createLocalInquiryId(),
+        question: question,
+        category: widget.category,
+        clientName: _clientName,
+        createdAt: DateTime.now(),
+        wantsPrice: _knowPrice,
+        wantsTime: _knowTime,
+        wantsSpecialist: _knowSpecialist,
+        wantsAppointmentTime: _knowAppointment,
+        attachmentUrl: attachmentUrl,
+      );
+      await InquiryService.saveInquiry(inquiry);
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const ClientViewInquiryScreen()),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось отправить заявку: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSending = false;
+        });
+      }
+    }
   }
 
   @override
@@ -346,11 +261,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Text(
               _city ?? 'Загрузка...',
@@ -423,130 +334,102 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                             // Темно-синяя полоса с текстом и иконками
-                            GestureDetector(
-                              onTap: () {
-                                // Фокус на поле ввода
-                                FocusScope.of(context).requestFocus(FocusNode());
-                                Future.delayed(Duration(milliseconds: 100), () {
-                                  FocusScope.of(context).requestFocus(FocusNode());
-                                });
-                              },
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF1E88E5), // Темно-синий цвет
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Expanded(
-                                      child: TextField(
-                                        controller: _questionController,
-                                        style: const TextStyle(color: Colors.white, fontSize: 14),
-                                        decoration: const InputDecoration(
-                                          hintText: 'Задайте вопрос в развернутом виде',
-                                          hintStyle: TextStyle(color: Colors.white70, fontSize: 14),
-                                          border: InputBorder.none,
-                                          contentPadding: EdgeInsets.zero,
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E88E5),
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: TextField(
+                                          controller: _questionController,
+                                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                                          decoration: const InputDecoration(
+                                            hintText: 'Задайте вопрос в развернутом виде',
+                                            hintStyle: TextStyle(color: Colors.white70, fontSize: 14),
+                                            border: InputBorder.none,
+                                            contentPadding: EdgeInsets.zero,
+                                          ),
+                                          maxLines: 3,
+                                          minLines: 1,
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    if (_hasText)
+                                      IconButton(
+                                        onPressed: _pickAttachment,
+                                        icon: const Icon(
+                                          Icons.attach_file,
+                                          color: Colors.white,
+                                        ),
+                                        tooltip: 'Прикрепить фото',
+                                      ),
+                                      IconButton(
+                                        onPressed: _toggleVoiceInput,
+                                        icon: Icon(
+                                          _isListening ? Icons.mic : Icons.mic_none,
+                                          color: _isListening ? Colors.amber : Colors.white,
+                                        ),
+                                        tooltip: 'Спросить голосом',
+                                      ),
                                       GestureDetector(
-                                        onTap: () async {
-                                          if (_questionController.text.isNotEmpty) {
-                                            // Загружаем файл на сервер, если он есть
-                                            String? attachmentUrl = _attachmentPath;
-                                            
-                                            if (_attachmentPath != null && ApiConfig.isConfigured) {
-                                              setState(() {
-                                                _isLoading = true;
-                                              });
-                                              
-                                              try {
-                                                final fileService = RemoteFileService();
-                                                final filename = await fileService.uploadFile(_attachmentPath!);
-                                                if (filename != null) {
-                                                  attachmentUrl = RemoteFileService.getFileUrl(filename);
-                                                } else {
-                                                  // Если загрузка не удалась, используем локальный путь
-                                                  attachmentUrl = _attachmentPath;
-                                                }
-                                              } catch (e) {
-                                                // Если ошибка загрузки, используем локальный путь
-                                                attachmentUrl = _attachmentPath;
-                                              } finally {
-                                                if (mounted) {
-                                                  setState(() {
-                                                    _isLoading = false;
-                                                  });
-                                                }
-                                              }
-                                            }
-                                            
-                                            // Сохранить запрос
-                                            final inquiry = InquiryModel(
-                                              id: DateTime.now().millisecondsSinceEpoch.toString(),
-                                              question: _questionController.text,
-                                              category: widget.category,
-                                              clientName: _clientName,
-                                              createdAt: DateTime.now(),
-                                              wantsPrice: _knowPrice,
-                                              wantsTime: _knowTime,
-                                              wantsSpecialist: _knowSpecialist,
-                                              wantsAppointmentTime: _knowAppointment,
-                                              attachmentUrl: attachmentUrl,
-                                            );
-                                            await InquiryService.saveInquiry(inquiry);
-                                            
-                                            if (mounted) {
-                                              Navigator.push(
-                                                context,
-                                                MaterialPageRoute(
-                                                  builder: (context) => ClientViewInquiryScreen(),
-                                                ),
-                                              );
-                                            }
-                                          }
-                                        },
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            borderRadius: BorderRadius.circular(15),
-                                          ),
-                                          child: const Text(
-                                            'Отправить',
-                                            style: TextStyle(
-                                              color: Color(0xFF1E88E5),
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w500,
+                                        onTap: _hasText && !_isSending ? _sendInquiry : null,
+                                        child: Opacity(
+                                          opacity: _hasText && !_isSending ? 1 : 0.5,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            decoration: BoxDecoration(
+                                              color: Colors.white,
+                                              borderRadius: BorderRadius.circular(15),
+                                            ),
+                                            child: Text(
+                                              _isSending ? '...' : 'Отправить',
+                                              style: const TextStyle(
+                                                color: Color(0xFF1E88E5),
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w500,
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      )
-                                    else
-                                      Row(
-                                        children: [
-                                          GestureDetector(
-                                            onTap: _attachFile,
-                                            child: const Icon(Icons.attach_file, color: Colors.white, size: 20),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          GestureDetector(
-                                            onTap: _startListening,
-                                            child: Icon(
-                                              Icons.mic,
-                                              color: _isListening ? Colors.red : Colors.white,
-                                              size: 20,
-                                            ),
-                                          ),
-                                        ],
                                       ),
+                                    ],
+                                  ),
+                                  if (_attachmentBytes != null) ...[
+                                    const SizedBox(height: 12),
+                                    Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Image.memory(
+                                            _attachmentBytes!,
+                                            width: 56,
+                                            height: 56,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 10),
+                                        const Expanded(
+                                          child: Text(
+                                            'Фото будет отправлено вместе с вопросом',
+                                            style: TextStyle(color: Colors.white, fontSize: 13),
+                                          ),
+                                        ),
+                                        IconButton(
+                                          onPressed: () {
+                                            setState(() {
+                                              _attachmentPath = null;
+                                              _attachmentBytes = null;
+                                            });
+                                          },
+                                          icon: const Icon(Icons.close, color: Colors.white),
+                                        ),
+                                      ],
+                                    ),
                                   ],
-                                ),
+                                ],
                               ),
                             ),
                             const SizedBox(height: 24),
@@ -614,10 +497,7 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 }
 

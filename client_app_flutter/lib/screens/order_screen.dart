@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import '../services/inquiry_service.dart';
 import '../services/remote_inquiry_service.dart';
+import '../services/remote_ordering_service.dart';
 import '../models/inquiry_model.dart';
 import '../models/order_request_model.dart';
 import 'service_query_screen.dart';
 import 'order_request_screen.dart';
+import 'client_view_inquiry_screen.dart';
 import '../constants/categories.dart';
+import '../utils/order_state.dart';
 
 class OrderScreen extends StatefulWidget {
   const OrderScreen({super.key});
@@ -16,8 +19,9 @@ class OrderScreen extends StatefulWidget {
 
 class _OrderScreenState extends State<OrderScreen> {
   List<InquiryModel> _orderRequests = [];
+  Map<int, List<Map<String, dynamic>>> _ordersByRequestId = {};
   bool _isLoading = false;
-  bool _isRefreshing = false;
+  final RemoteOrderingService _orderingService = RemoteOrderingService();
 
   @override
   void initState() {
@@ -27,21 +31,37 @@ class _OrderScreenState extends State<OrderScreen> {
 
   Future<void> _loadOrders() async {
     if (!mounted) return;
-    
+
     setState(() {
       _isLoading = true;
     });
 
     try {
       final orders = await InquiryService.getAllInquiries();
+      final companyResponses = await _orderingService.getOrders();
+      final ordersByRequestId = <int, List<Map<String, dynamic>>>{};
+
+      for (final order in companyResponses ?? const <Map<String, dynamic>>[]) {
+        final rawRequestId =
+            order['order_request_id'] ?? order['orderRequestId'];
+        final requestId = rawRequestId is num
+            ? rawRequestId.toInt()
+            : int.tryParse(rawRequestId?.toString() ?? '');
+        if (requestId == null) {
+          continue;
+        }
+        ordersByRequestId.putIfAbsent(requestId, () => []).add(order);
+      }
+
       if (mounted) {
         setState(() {
           _orderRequests = orders;
+          _ordersByRequestId = ordersByRequestId;
           _isLoading = false;
         });
       }
     } catch (e) {
-      print('Error loading orders: $e');
+      debugPrint('Error loading orders: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
@@ -57,27 +77,48 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Future<void> _onRefresh() async {
-    setState(() {
-      _isRefreshing = true;
-    });
-
     await _loadOrders();
+  }
 
-    if (mounted) {
-      setState(() {
-        _isRefreshing = false;
-      });
+  int _getStatus(InquiryModel inquiry) {
+    final requestId = int.tryParse(inquiry.id);
+    final responses = requestId == null
+        ? const <Map<String, dynamic>>[]
+        : _ordersByRequestId[requestId] ?? const <Map<String, dynamic>>[];
+
+    if (responses.any(isOrderFinished)) {
+      return 4;
     }
+
+    if (responses.any(isOrderConfirmed)) {
+      return 3;
+    }
+
+    if (responses.any(isOrderActive)) {
+      return 2;
+    }
+
+    if (responses.any(isOrderCanceled)) {
+      return 5;
+    }
+
+    return responses.isEmpty ? 1 : 2;
   }
 
   String _getStatusText(int status) {
     switch (status) {
       case 1:
-        return 'Активен';
+        return 'Ожидает';
       case 2:
+        return 'Есть отклики';
+      case 3:
+        return 'Запись';
+      case 4:
         return 'Завершен';
-      default:
+      case 5:
         return 'Отменен';
+      default:
+        return 'Ожидает';
     }
   }
 
@@ -86,10 +127,22 @@ class _OrderScreenState extends State<OrderScreen> {
       case 1:
         return const Color(0xFF6DC876);
       case 2:
+        return const Color(0xFFE09A2D);
+      case 3:
         return const Color(0xFF2D81E0);
+      case 4:
+        return const Color(0xFF2D81E0);
+      case 5:
+        return const Color(0xFFDF5B5B);
       default:
         return const Color(0xFFAEAEB2);
     }
+  }
+
+  int _getResponseCount(InquiryModel inquiry) {
+    final requestId = int.tryParse(inquiry.id);
+    if (requestId == null) return 0;
+    return _ordersByRequestId[requestId]?.length ?? 0;
   }
 
   String _formatDate(DateTime date) {
@@ -105,8 +158,8 @@ class _OrderScreenState extends State<OrderScreen> {
         child: _isLoading && _orderRequests.isEmpty
             ? const Center(child: CircularProgressIndicator())
             : _orderRequests.isEmpty
-                ? _buildEmptyState()
-                : _buildOrdersList(),
+            ? _buildEmptyState()
+            : _buildOrdersList(),
       ),
     );
   }
@@ -192,14 +245,19 @@ class _OrderScreenState extends State<OrderScreen> {
                       context,
                       MaterialPageRoute(
                         builder: (context) => ServiceQueryScreen(
-                          category: kSystemCategories.isNotEmpty ? kSystemCategories[0] : 'Услуги',
+                          category: kSystemCategories.isNotEmpty
+                              ? kSystemCategories[0]
+                              : 'Услуги',
                         ),
                       ),
                     ).then((_) => _loadOrders());
                   },
                   borderRadius: BorderRadius.circular(16),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 32),
+                    padding: const EdgeInsets.symmetric(
+                      vertical: 18,
+                      horizontal: 32,
+                    ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: const [
@@ -288,7 +346,10 @@ class _OrderScreenState extends State<OrderScreen> {
               ),
               if (_orderRequests.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: const Color(0xFF2D81E0),
                     borderRadius: BorderRadius.circular(20),
@@ -322,6 +383,23 @@ class _OrderScreenState extends State<OrderScreen> {
   Future<void> _openOrderRequest(InquiryModel inquiry) async {
     if (!mounted) return;
 
+    final status = _getStatus(inquiry);
+    final hasResponses = _getResponseCount(inquiry) > 0;
+
+    if (hasResponses || status >= 3) {
+      await InquiryService.setCurrentInquiry(inquiry);
+      if (!mounted) return;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => const ClientViewInquiryScreen(),
+        ),
+      );
+      if (!mounted) return;
+      _loadOrders();
+      return;
+    }
+
     // Показываем индикатор загрузки
     showDialog(
       context: context,
@@ -330,31 +408,39 @@ class _OrderScreenState extends State<OrderScreen> {
     );
 
     try {
-      // Получаем полные данные заявки с бэкенда
-      final remoteService = RemoteInquiryService();
       final orderRequestId = int.tryParse(inquiry.id);
-      
+
       if (orderRequestId == null) {
         if (mounted) {
           Navigator.pop(context); // Закрываем индикатор загрузки
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Неверный ID заявки')),
+          await InquiryService.setCurrentInquiry(inquiry);
+          if (!mounted) return;
+          await Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (context) =>
+                  ServiceQueryScreen(category: inquiry.category),
+            ),
           );
+          _loadOrders();
         }
         return;
       }
 
+      // Получаем полные данные заявки с бэкенда
+      final remoteService = RemoteInquiryService();
       final orderData = await remoteService.getOrderRequest(orderRequestId);
-      
+
       if (!mounted) return;
       Navigator.pop(context); // Закрываем индикатор загрузки
-      
+
       if (orderData != null) {
         final orderRequest = OrderRequestModel.fromJson(orderData);
         await Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => OrderRequestScreen(orderRequest: orderRequest),
+            builder: (context) =>
+                OrderRequestScreen(orderRequest: orderRequest),
           ),
         );
         // Обновляем список после возврата
@@ -378,10 +464,10 @@ class _OrderScreenState extends State<OrderScreen> {
   }
 
   Widget _buildOrderCard(InquiryModel order) {
-    // Определяем статус (по умолчанию активен, если нет ответа компании)
-    final status = order.companyResponse == null ? 1 : 2;
+    final status = _getStatus(order);
     final statusColor = _getStatusColor(status);
-    
+    final responseCount = _getResponseCount(order);
+
     return TweenAnimationBuilder<double>(
       duration: const Duration(milliseconds: 300),
       tween: Tween(begin: 0.0, end: 1.0),
@@ -480,7 +566,10 @@ class _OrderScreenState extends State<OrderScreen> {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           gradient: LinearGradient(
                             colors: [
@@ -528,9 +617,14 @@ class _OrderScreenState extends State<OrderScreen> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF87CEEB).withValues(alpha: 0.15),
+                          color: const Color(
+                            0xFF87CEEB,
+                          ).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Row(
@@ -569,17 +663,27 @@ class _OrderScreenState extends State<OrderScreen> {
                   ),
                   const SizedBox(height: 12),
                   // Индикатор ответов (если есть)
-                  if (status == 2)
+                  if (responseCount > 0)
                     Row(
                       children: [
                         Icon(
-                          Icons.check_circle,
+                          switch (status) {
+                            3 => Icons.event_available,
+                            4 => Icons.task_alt,
+                            5 => Icons.cancel_outlined,
+                            _ => Icons.mark_email_read,
+                          },
                           size: 16,
                           color: statusColor,
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          'Есть ответы от компаний',
+                          switch (status) {
+                            3 => 'Запись подтверждена',
+                            4 => 'Заказ завершен',
+                            5 => 'Заказ отменен',
+                            _ => 'Откликов от компаний: $responseCount',
+                          },
                           style: TextStyle(
                             fontSize: 12,
                             color: statusColor,
@@ -602,21 +706,30 @@ class _OrderScreenState extends State<OrderScreen> {
       case 1:
         return Icons.access_time;
       case 2:
-        return Icons.check_circle;
+        return Icons.mark_email_read;
+      case 3:
+        return Icons.event_available;
+      case 4:
+        return Icons.task_alt;
+      case 5:
+        return Icons.cancel_outlined;
       default:
-        return Icons.cancel;
+        return Icons.help_outline;
     }
   }
 
   IconData _getCategoryIcon(String category) {
     // Иконки для разных категорий
-    if (category.toLowerCase().contains('авто') || category.toLowerCase().contains('машина')) {
+    if (category.toLowerCase().contains('авто') ||
+        category.toLowerCase().contains('машина')) {
       return Icons.directions_car;
     } else if (category.toLowerCase().contains('ремонт')) {
       return Icons.build;
-    } else if (category.toLowerCase().contains('красота') || category.toLowerCase().contains('салон')) {
+    } else if (category.toLowerCase().contains('красота') ||
+        category.toLowerCase().contains('салон')) {
       return Icons.face;
-    } else if (category.toLowerCase().contains('здоров') || category.toLowerCase().contains('медиц')) {
+    } else if (category.toLowerCase().contains('здоров') ||
+        category.toLowerCase().contains('медиц')) {
       return Icons.local_hospital;
     } else if (category.toLowerCase().contains('образован')) {
       return Icons.school;

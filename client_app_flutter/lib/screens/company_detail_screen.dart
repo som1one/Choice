@@ -5,7 +5,11 @@ import '../services/remote_chat_service.dart';
 import '../services/remote_ordering_service.dart';
 import '../services/remote_review_service.dart';
 import '../utils/auth_guard.dart';
+import '../utils/order_state.dart';
 import 'chat_screen.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final Map<String, dynamic> company;
@@ -24,10 +28,26 @@ class CompanyDetailScreen extends StatefulWidget {
 }
 
 class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
-  final TextEditingController _clientResponseController = TextEditingController();
+  final TextEditingController _clientResponseController =
+      TextEditingController();
+  final RemoteOrderingService _orderingService = RemoteOrderingService();
+  final RemoteReviewService _reviewService = RemoteReviewService();
   String? _selectedEnrollmentTime;
   bool _isLoading = false;
+  bool _isFinishingOrder = false;
+  bool _isSubmittingReview = false;
+  bool _canLeaveReview = false;
   final RemoteChatService _chatService = RemoteChatService();
+
+  @override
+  void initState() {
+    super.initState();
+    final availableDates = _extractAvailableEnrollmentDates();
+    if (availableDates.isNotEmpty) {
+      _selectedEnrollmentTime = availableDates.first;
+    }
+    _checkCanLeaveReview();
+  }
 
   @override
   void dispose() {
@@ -35,8 +55,56 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     super.dispose();
   }
 
+  String? _resolveCompanyId() {
+    final companyId = widget.company['guid'] ?? widget.company['id'];
+    final value = companyId?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+    return value;
+  }
+
+  Future<void> _checkCanLeaveReview() async {
+    final companyId = _resolveCompanyId();
+    if (companyId == null) return;
+
+    final canLeave = await _reviewService.canSendReview(companyId);
+    if (!mounted) return;
+    setState(() {
+      _canLeaveReview = canLeave;
+    });
+  }
+
   Future<void> _confirmBooking() async {
-    if (_selectedEnrollmentTime == null) {
+    if (isOrderFinished(widget.order)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Заказ уже завершен')));
+      return;
+    }
+    if (isOrderCanceled(widget.order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Заказ отменен и не может быть подтвержден'),
+        ),
+      );
+      return;
+    }
+    if (isOrderConfirmed(widget.order)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Запись уже подтверждена')));
+      return;
+    }
+
+    final orderId = _resolveOrderId();
+    if (orderId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось определить заказ')),
+      );
+      return;
+    }
+
+    final hasSelectableDates = _extractAvailableEnrollmentDates().isNotEmpty;
+    if (hasSelectableDates && _selectedEnrollmentTime == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Выберите дату и время записи')),
       );
@@ -48,37 +116,49 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     });
 
     try {
-      final orderId = widget.order['id'] ?? widget.order['orderId'];
-      if (orderId != null) {
-        final orderingService = RemoteOrderingService();
-        await orderingService.confirmEnrollmentDate(orderId);
+      final result = await _orderingService.confirmEnrollmentDate(orderId);
 
-        final clientComment = _clientResponseController.text.trim();
-        final companyId = widget.company['guid'] ?? widget.company['id'];
-        if (clientComment.isNotEmpty && companyId != null) {
-          await _chatService.sendMessage(
-            text: clientComment,
-            receiverId: companyId.toString(),
-          );
+      final clientComment = _clientResponseController.text.trim();
+      final companyId = widget.company['guid'] ?? widget.company['id'];
+      if (clientComment.isNotEmpty && companyId != null) {
+        await _chatService.sendMessage(
+          text: clientComment,
+          receiverId: companyId.toString(),
+        );
+      }
+
+      if (result != null) {
+        widget.order['status'] = parseOrderStatus(result);
+        widget.order['is_date_confirmed'] =
+            result['is_date_confirmed'] ?? result['isDateConfirmed'] ?? true;
+        widget.order['is_enrolled'] =
+            result['is_enrolled'] ?? result['isEnrolled'] ?? true;
+        if (result['enrollment_date'] != null) {
+          widget.order['enrollment_date'] = result['enrollment_date'];
         }
-        
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                clientComment.isEmpty
-                    ? 'Запись подтверждена'
-                    : 'Запись подтверждена, пожелание отправлено в чат',
-              ),
+      } else {
+        widget.order['is_date_confirmed'] = true;
+        widget.order['is_enrolled'] = true;
+      }
+
+      if (mounted) {
+        await _checkCanLeaveReview();
+        setState(() {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              clientComment.isEmpty
+                  ? 'Запись подтверждена'
+                  : 'Запись подтверждена, пожелание отправлено в чат',
             ),
-          );
-        }
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка: $e')));
       }
     } finally {
       if (mounted) {
@@ -87,6 +167,190 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
         });
       }
     }
+  }
+
+  Future<void> _finishOrder() async {
+    if (_isFinishingOrder) return;
+    if (isOrderFinished(widget.order)) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Заказ уже завершен')));
+      return;
+    }
+    if (isOrderCanceled(widget.order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Отмененный заказ нельзя завершить')),
+      );
+      return;
+    }
+    if (!canFinishOrder(widget.order)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сначала подтвердите запись по заказу')),
+      );
+      return;
+    }
+
+    final orderId = _resolveOrderId();
+    if (orderId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось определить заказ')),
+      );
+      return;
+    }
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Завершить заказ'),
+        content: const Text(
+          'После завершения заказа можно будет оставить отзыв компании.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Завершить'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() {
+      _isFinishingOrder = true;
+    });
+
+    try {
+      final result = await _orderingService.finish(orderId);
+      if (!mounted) return;
+      if (result != null) {
+        widget.order['status'] = parseOrderStatus(result);
+        widget.order['is_date_confirmed'] =
+            result['is_date_confirmed'] ??
+            result['isDateConfirmed'] ??
+            widget.order['is_date_confirmed'];
+        widget.order['is_enrolled'] =
+            result['is_enrolled'] ??
+            result['isEnrolled'] ??
+            widget.order['is_enrolled'];
+        await _checkCanLeaveReview();
+        setState(() {});
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Заказ завершен')));
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Не удалось завершить заказ: $e')));
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isFinishingOrder = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _sendCompanyReview({required int grade, String? text}) async {
+    final companyId = _resolveCompanyId();
+    if (companyId == null || _isSubmittingReview) return;
+
+    setState(() {
+      _isSubmittingReview = true;
+    });
+
+    try {
+      final result = await _reviewService.sendReview(
+        guid: companyId,
+        grade: grade,
+        text: text,
+      );
+      if (!mounted) return;
+      if (result != null && result['error'] == null) {
+        await _checkCanLeaveReview();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Отзыв о компании отправлен')),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              result?['error']?.toString() ?? 'Не удалось отправить отзыв',
+            ),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSubmittingReview = false;
+        });
+      }
+    }
+  }
+
+  void _showLeaveReviewDialog() {
+    int grade = 5;
+    final textController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Оценить компанию'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text('Оценка: $grade'),
+              Slider(
+                value: grade.toDouble(),
+                min: 1,
+                max: 5,
+                divisions: 4,
+                label: grade.toString(),
+                onChanged: (value) {
+                  setDialogState(() {
+                    grade = value.toInt();
+                  });
+                },
+              ),
+              TextField(
+                controller: textController,
+                decoration: const InputDecoration(
+                  hintText: 'Комментарий к отзыву',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _sendCompanyReview(
+                  grade: grade,
+                  text: textController.text.trim().isEmpty
+                      ? null
+                      : textController.text.trim(),
+                );
+              },
+              child: const Text('Отправить'),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _startChat() async {
@@ -110,7 +374,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   Widget build(BuildContext context) {
     final company = widget.company;
     final order = widget.order;
-    
+
     final companyName = company['title'] ?? company['name'] ?? 'Компания';
     // Адрес может быть объектом или строкой
     final addressObj = company['address'];
@@ -120,7 +384,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     final website = company['site_url'] ?? company['website'] ?? '';
     final email = company['email'] ?? '';
     final phone = company['phone_number'] ?? company['phone'] ?? '';
-    final ratingRaw = company['average_grade'] ?? company['averageGrade'] ?? company['rating'];
+    final ratingRaw =
+        company['average_grade'] ??
+        company['averageGrade'] ??
+        company['rating'];
     final rating = ratingRaw is num
         ? ratingRaw.toDouble()
         : double.tryParse(ratingRaw?.toString() ?? '') ?? 0.0;
@@ -128,37 +395,33 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
 
     final price = order['price'] ?? 0;
     final deadline = order['deadline'] ?? 0;
-    final responseText =
-        (order['response_text'] ?? order['responseText'] ?? '').toString();
+    final responseText = (order['response_text'] ?? order['responseText'] ?? '')
+        .toString();
     final specialistName =
         (order['specialist_name'] ?? order['specialistName'] ?? '').toString();
     final specialistPhone =
-        (order['specialist_phone'] ?? order['specialistPhone'] ?? '').toString();
+        (order['specialist_phone'] ?? order['specialistPhone'] ?? '')
+            .toString();
     final prepayment = order['prepayment'] ?? 0;
     final requiresPrepayment = prepayment > 0;
+    final isFinished = isOrderFinished(order);
+    final isCanceled = isOrderCanceled(order);
+    final isConfirmed = isOrderConfirmed(order);
 
     return Scaffold(
+      bottomNavigationBar: _buildBottomActionBar(),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 2.5,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 2.5)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -203,7 +466,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                 ),
               ),
             ),
-            
+
             // Карточка компании (цвет из card_color)
             Container(
               width: double.infinity,
@@ -223,7 +486,11 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                       children: [
                         Row(
                           children: [
-                            Icon(Icons.directions_car, color: Colors.red, size: 20),
+                            Icon(
+                              Icons.directions_car,
+                              color: Colors.red,
+                              size: 20,
+                            ),
                             const SizedBox(width: 8),
                             Text(
                               companyName,
@@ -240,23 +507,37 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                         ],
                         if (website.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text('www. $website', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'www. $website',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                         ],
                         if (email.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text('Mail $email', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'Mail $email',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                         ],
                         if (phone.isNotEmpty) ...[
                           const SizedBox(height: 4),
-                          Text('Тел горячей линии $phone', style: const TextStyle(fontSize: 14)),
+                          Text(
+                            'Тел горячей линии $phone',
+                            style: const TextStyle(fontSize: 14),
+                          ),
                         ],
                         const SizedBox(height: 12),
                         Row(
                           children: [
-                            const Text('Рейтинг ', style: TextStyle(fontSize: 14)),
+                            const Text(
+                              'Рейтинг ',
+                              style: TextStyle(fontSize: 14),
+                            ),
                             ...List.generate(5, (index) {
                               return Icon(
-                                index < rating.round() ? Icons.star : Icons.star_border,
+                                index < rating.round()
+                                    ? Icons.star
+                                    : Icons.star_border,
                                 color: Colors.amber,
                                 size: 16,
                               );
@@ -270,7 +551,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                             children: [
                               const Icon(Icons.thumb_up, size: 16),
                               const SizedBox(width: 4),
-                              const Text('Отзывы', style: TextStyle(fontSize: 14)),
+                              const Text(
+                                'Отзывы',
+                                style: TextStyle(fontSize: 14),
+                              ),
                             ],
                           ),
                         ),
@@ -292,13 +576,17 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                             ),
                           ),
                           const SizedBox(height: 8),
-                          ...services.take(5).map((service) => Padding(
-                            padding: const EdgeInsets.only(bottom: 4),
-                            child: Text(
-                              '• $service',
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          )),
+                          ...services
+                              .take(5)
+                              .map(
+                                (service) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 4),
+                                  child: Text(
+                                    '• $service',
+                                    style: const TextStyle(fontSize: 12),
+                                  ),
+                                ),
+                              ),
                           const SizedBox(height: 12),
                         ],
                         // Соцсети
@@ -320,25 +608,31 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                 children: [
                   const Text(
                     'ОТВЕТ КОМПАНИИ',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 12),
                   Text('Цена $price', style: const TextStyle(fontSize: 14)),
-                  Text('Срок $deadline ${_getDeadlineUnit(deadline)}', style: const TextStyle(fontSize: 14)),
+                  Text(
+                    'Срок $deadline ${_getDeadlineUnit(deadline)}',
+                    style: const TextStyle(fontSize: 14),
+                  ),
                   if (responseText.isNotEmpty) ...[
                     const SizedBox(height: 8),
                     Text(responseText, style: const TextStyle(fontSize: 14)),
                   ],
                   if (specialistName.isNotEmpty) ...[
                     const SizedBox(height: 8),
-                    Text('Имя специалиста $specialistName', style: const TextStyle(fontSize: 14)),
+                    Text(
+                      'Имя специалиста $specialistName',
+                      style: const TextStyle(fontSize: 14),
+                    ),
                   ],
                   if (specialistPhone.isNotEmpty) ...[
                     const SizedBox(height: 4),
-                    Text('Телефон мастера $specialistPhone', style: const TextStyle(fontSize: 14)),
+                    Text(
+                      'Телефон мастера $specialistPhone',
+                      style: const TextStyle(fontSize: 14),
+                    ),
                   ],
                 ],
               ),
@@ -370,10 +664,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                 children: [
                   const Text(
                     'ОТВЕТ',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 8),
                   TextField(
@@ -390,31 +681,98 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
 
             const SizedBox(height: 24),
 
-            // Рейтинг (неактивен до завершения диалога)
+            // Завершение работы и отзыв
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text(
-                    'Поставить рейтинг',
+                    'Завершение и отзыв',
                     style: TextStyle(fontSize: 14),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: List.generate(5, (index) {
-                      return Icon(
-                        Icons.star_border,
-                        color: Colors.grey,
-                        size: 24,
-                      );
-                    }),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    '(Рейтинг можно поставить после завершения диалога)',
-                    style: TextStyle(fontSize: 12, color: Colors.grey),
-                  ),
+                  const SizedBox(height: 10),
+                  if (isCanceled)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red),
+                      ),
+                      child: const Text(
+                        'Заказ отменен. Для новой записи выберите другой отклик.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )
+                  else if (isConfirmed && !isFinished)
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.blue),
+                      ),
+                      child: const Text(
+                        'Заказ подтвержден. Завершить его можно кнопкой внизу экрана.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    )
+                  else if (!isConfirmed)
+                    const Text(
+                      'Кнопка завершения появится после подтверждения записи.',
+                      style: TextStyle(fontSize: 12, color: Colors.grey),
+                    )
+                  else
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.green.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.green),
+                      ),
+                      child: const Text(
+                        'Заказ завершен. Можно оставить отзыв компании.',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  if (isFinished) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _canLeaveReview && !_isSubmittingReview
+                            ? _showLeaveReviewDialog
+                            : null,
+                        icon: _isSubmittingReview
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.star_outline),
+                        label: Text(
+                          _canLeaveReview
+                              ? 'Поставить отзыв'
+                              : 'Отзыв уже оставлен',
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -438,7 +796,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Сумма предоплаты: $prepayment. Оплата внутри приложения пока не подключена, сумму нужно согласовать с компанией в чате.',
-                      style: const TextStyle(fontSize: 13, color: Colors.black87),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        color: Colors.black87,
+                      ),
                     ),
                   ],
                 ),
@@ -516,6 +877,65 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     return const <String>[];
   }
 
+  int? _resolveOrderId() {
+    final rawOrderId = widget.order['id'] ?? widget.order['orderId'];
+    if (rawOrderId is num) {
+      return rawOrderId.toInt();
+    }
+    return int.tryParse(rawOrderId?.toString() ?? '');
+  }
+
+  Widget? _buildBottomActionBar() {
+    if (!canFinishOrder(widget.order)) {
+      return null;
+    }
+
+    return SafeArea(
+      minimum: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: SizedBox(
+        width: double.infinity,
+        child: ElevatedButton.icon(
+          onPressed: _isFinishingOrder ? null : _finishOrder,
+          icon: _isFinishingOrder
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Icon(Icons.task_alt, color: Colors.white),
+          label: Text(
+            _isFinishingOrder ? 'Завершение...' : 'Завершить заказ',
+            style: const TextStyle(color: Colors.white),
+          ),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: const Color(0xFF2D81E0),
+            padding: const EdgeInsets.symmetric(vertical: 16),
+          ),
+        ),
+      ),
+    );
+  }
+
+  List<String> _extractAvailableEnrollmentDates() {
+    final enrollmentDateStr =
+        widget.order['enrollment_date'] ?? widget.order['enrollmentDate'];
+    if (enrollmentDateStr == null) {
+      return const <String>[];
+    }
+
+    try {
+      final date = DateTime.parse(enrollmentDateStr.toString());
+      return <String>[
+        '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
+      ];
+    } catch (_) {
+      return const <String>[];
+    }
+  }
+
   void _selectEnrollmentDate(String dateTime) {
     setState(() {
       _selectedEnrollmentTime = dateTime;
@@ -552,63 +972,88 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     final instagram = company['instagram'] ?? company['instagram_url'];
     final telegram = company['telegram'] ?? company['telegram_url'];
     return (vk != null && vk.toString().isNotEmpty) ||
-           (instagram != null && instagram.toString().isNotEmpty) ||
-           (telegram != null && telegram.toString().isNotEmpty);
+        (instagram != null && instagram.toString().isNotEmpty) ||
+        (telegram != null && telegram.toString().isNotEmpty);
   }
 
   Widget _buildSocialNetworks(Map<String, dynamic> company) {
     final socialMedias = company['social_medias'] ?? company['socialMedias'];
     List<String> socialUrls = [];
-    
+
     if (socialMedias is List) {
-      socialUrls = socialMedias.map((e) => e.toString()).where((url) => url.isNotEmpty).toList();
+      socialUrls = socialMedias
+          .map((e) => e.toString())
+          .where((url) => url.isNotEmpty)
+          .toList();
     } else {
       // Fallback для старых полей
       final vk = company['vk'] ?? company['vk_url'];
       final instagram = company['instagram'] ?? company['instagram_url'];
       final telegram = company['telegram'] ?? company['telegram_url'];
       if (vk != null && vk.toString().isNotEmpty) socialUrls.add(vk.toString());
-      if (instagram != null && instagram.toString().isNotEmpty) socialUrls.add(instagram.toString());
-      if (telegram != null && telegram.toString().isNotEmpty) socialUrls.add(telegram.toString());
+      if (instagram != null && instagram.toString().isNotEmpty)
+        socialUrls.add(instagram.toString());
+      if (telegram != null && telegram.toString().isNotEmpty)
+        socialUrls.add(telegram.toString());
     }
 
     return Wrap(
       spacing: 8,
       children: socialUrls.map((url) {
-        // Определяем тип соцсети по URL
-        String label = 'Соцсеть';
-        Color bgColor = Colors.blue[400]!;
-        if (url.toLowerCase().contains('vk.com') || url.toLowerCase().contains('vkontakte')) {
-          label = 'VK';
-          bgColor = Colors.blue[700]!;
-        } else if (url.toLowerCase().contains('instagram.com')) {
-          label = 'Instagram';
-          bgColor = Colors.pink;
-        } else if (url.toLowerCase().contains('t.me') || url.toLowerCase().contains('telegram')) {
-          label = 'Telegram';
-          bgColor = Colors.blue[400]!;
-        }
-        
+        final social = _describeSocialUrl(url);
         return GestureDetector(
           onTap: () => _launchUrl(url),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
             decoration: BoxDecoration(
-              color: label == 'Instagram' 
-                ? null 
-                : bgColor,
-              gradient: label == 'Instagram'
-                ? const LinearGradient(
-                    colors: [Color(0xFFE1306C), Color(0xFFFD1D1D), Color(0xFFFCAF45)],
-                  )
-                : null,
+              color: social.gradient == null ? social.color : null,
+              gradient: social.gradient,
               borderRadius: BorderRadius.circular(4),
             ),
-            child: Text(label, style: const TextStyle(color: Colors.white, fontSize: 12)),
+            child: Text(
+              social.label,
+              style: const TextStyle(color: Colors.white, fontSize: 12),
+            ),
           ),
         );
       }).toList(),
     );
+  }
+
+  ({String label, Color color, Gradient? gradient}) _describeSocialUrl(
+    String url,
+  ) {
+    final lower = url.toLowerCase();
+    if (lower.contains('vk.com') || lower.contains('vkontakte')) {
+      return (label: 'VK', color: Colors.blue[700]!, gradient: null);
+    }
+    if (lower.contains('instagram.com') || lower.contains('instagr.am')) {
+      return (
+        label: 'Instagram',
+        color: Colors.transparent,
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE1306C), Color(0xFFFD1D1D), Color(0xFFFCAF45)],
+        ),
+      );
+    }
+    if (lower.contains('t.me') || lower.contains('telegram')) {
+      return (label: 'Telegram', color: Colors.blue[400]!, gradient: null);
+    }
+    if (lower.contains('wa.me') ||
+        lower.contains('whatsapp.com') ||
+        lower.contains('whatsapp')) {
+      return (label: 'WhatsApp', color: Colors.green, gradient: null);
+    }
+    if (lower.contains('ok.ru') || lower.contains('odnoklassniki')) {
+      return (label: 'OK', color: Colors.orange, gradient: null);
+    }
+    if (lower.contains('facebook.com') || lower.contains('fb.com')) {
+      return (label: 'Facebook', color: Colors.blue, gradient: null);
+    }
+    if (lower.contains('youtube.com') || lower.contains('youtu.be')) {
+      return (label: 'YouTube', color: Colors.red, gradient: null);
+    }
+    return (label: 'Соцсеть', color: Colors.blue[400]!, gradient: null);
   }
 
   Future<void> _launchUrl(String url) async {
@@ -628,8 +1073,10 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     try {
       // Используем правильный API для получения отзывов компании
       final reviewService = RemoteReviewService();
-      final companyReviews = await reviewService.getReviews(companyId.toString());
-      
+      final companyReviews = await reviewService.getReviews(
+        companyId.toString(),
+      );
+
       if (companyReviews == null) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -652,97 +1099,183 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                 : ListView.builder(
                     shrinkWrap: true,
                     itemCount: companyReviews.length,
-                  itemBuilder: (context, index) {
-                    final review = companyReviews[index];
-                    final gradeRaw = review['grade'];
-                    final grade = gradeRaw is num
-                        ? gradeRaw.toInt()
-                        : int.tryParse(gradeRaw?.toString() ?? '') ?? 0;
-                    final text = review['text'] ?? review['comment'] ?? '';
-                    final senderId = review['sender_id'] ?? '';
-                    final clientName = _formatReviewerLabel(
-                      prefix: 'Клиент',
-                      rawId: senderId,
-                    );
+                    itemBuilder: (context, index) {
+                      final review = companyReviews[index];
+                      final gradeRaw = review['grade'];
+                      final grade = gradeRaw is num
+                          ? gradeRaw.toInt()
+                          : int.tryParse(gradeRaw?.toString() ?? '') ?? 0;
+                      final text = review['text'] ?? review['comment'] ?? '';
+                      final senderId = review['sender_id'] ?? '';
+                      final clientName = _formatReviewerLabel(
+                        prefix: 'Клиент',
+                        rawId: senderId,
+                      );
 
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              clientName,
-                              style: const TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                            const SizedBox(height: 4),
-                            Row(
-                              children: List.generate(5, (i) {
-                                return Icon(
-                                  i < grade ? Icons.star : Icons.star_border,
-                                  color: Colors.amber,
-                                  size: 16,
-                                );
-                              }),
-                            ),
-                            if (text.isNotEmpty) ...[
+                      return Card(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        child: Padding(
+                          padding: const EdgeInsets.all(8.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                clientName,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               const SizedBox(height: 4),
-                              Text(text),
+                              Row(
+                                children: List.generate(5, (i) {
+                                  return Icon(
+                                    i < grade ? Icons.star : Icons.star_border,
+                                    color: Colors.amber,
+                                    size: 16,
+                                  );
+                                }),
+                              ),
+                              if (text.isNotEmpty) ...[
+                                const SizedBox(height: 4),
+                                Text(text),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Закрыть'),
+                      );
+                    },
+                  ),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Закрыть'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Ошибка загрузки отзывов: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Ошибка загрузки отзывов: $e')));
       }
     }
   }
 
   Widget _buildEnrollmentDates() {
-    // Пытаемся получить даты из заказа
-    final enrollmentDateStr = widget.order['enrollment_date'];
-    List<String> availableDates = [];
-    
-    if (enrollmentDateStr != null) {
-      try {
-        final date = DateTime.parse(enrollmentDateStr);
-        availableDates = [
-          '${date.day}.${date.month}.${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}',
-        ];
-      } catch (_) {
-        availableDates = [];
-      }
-    }
+    final availableDates = _extractAvailableEnrollmentDates();
+    final isFinished = isOrderFinished(widget.order);
+    final isCanceled = isOrderCanceled(widget.order);
+    final isConfirmed = isOrderConfirmed(widget.order);
 
-    if (availableDates.isEmpty) {
+    if (isCanceled) {
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.grey.shade100,
+          color: Colors.red.withValues(alpha: 0.1),
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade300),
+          border: Border.all(color: Colors.red),
         ),
-        child: const Text(
-          'Компания еще не предложила дату записи. Уточните детали в чате.',
-          style: TextStyle(fontSize: 13),
+        child: const Row(
+          children: [
+            Icon(Icons.cancel_outlined, color: Colors.red),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Этот заказ отменен. Подтверждение записи недоступно.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
         ),
+      );
+    }
+
+    if (isFinished) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.blue.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.blue),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.task_alt, color: Colors.blue),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Заказ уже завершен.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (isConfirmed) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.green.withValues(alpha: 0.1),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.green),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.check_circle, color: Colors.green),
+            SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Запись уже подтверждена. Детали можно уточнить в чате.',
+                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (availableDates.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: const Text(
+              'Компания еще не предложила дату записи. Можно принять отклик и договориться о времени в чате.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _isLoading || !canConfirmOrder(widget.order)
+                  ? null
+                  : _confirmBooking,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              child: const Text(
+                'Принять отклик',
+                style: TextStyle(fontSize: 13, color: Colors.white),
+              ),
+            ),
+          ),
+        ],
       );
     }
 
@@ -763,7 +1296,9 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                       width: isSelected ? 2 : 1,
                     ),
                     borderRadius: BorderRadius.circular(8),
-                    color: isSelected ? Colors.blue.withValues(alpha: 0.1) : Colors.transparent,
+                    color: isSelected
+                        ? Colors.blue.withValues(alpha: 0.1)
+                        : Colors.transparent,
                   ),
                   child: Text(
                     dateTime,
@@ -780,7 +1315,9 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
         }),
         Expanded(
           child: ElevatedButton(
-            onPressed: _isLoading ? null : _confirmBooking,
+            onPressed: _isLoading || !canConfirmOrder(widget.order)
+                ? null
+                : _confirmBooking,
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.green,
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -797,13 +1334,13 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 
-  String _formatReviewerLabel({required String prefix, required Object? rawId}) {
+  String _formatReviewerLabel({
+    required String prefix,
+    required Object? rawId,
+  }) {
     final normalized = rawId?.toString().trim() ?? '';
     if (normalized.isEmpty) return prefix;
     if (normalized.length <= 8) return '$prefix $normalized';
@@ -819,11 +1356,7 @@ class _PersonIconPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
 
     final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width / 2, headRadius), headRadius, paint);
 
     final bodyWidth = size.width * 0.7;
     final bodyHeight = size.height * 0.5;

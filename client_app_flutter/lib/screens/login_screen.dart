@@ -2,14 +2,16 @@
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'category_screen.dart';
 import 'client_registration_screen.dart';
 import 'company_login_screen.dart';
 import '../utils/auth_guard.dart';
 import 'admin_login_screen.dart';
+import 'admin_panel_screen.dart';
 import 'reset_password_screen.dart';
 import '../navigation/client_tab_navigator.dart';
 import '../navigation/company_tab_navigator.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -22,7 +24,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _loginController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   int _adminTapCount = 0;
-  
+
   String _selectedCity = 'Омск';
   final List<String> _cities = [
     'Москва',
@@ -56,12 +58,7 @@ class _LoginScreenState extends State<LoginScreen> {
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 2.5,
-              ),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 2.5)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -81,15 +78,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     _adminTapCount = 0;
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
+                      MaterialPageRoute(
+                        builder: (_) => const AdminLoginScreen(),
+                      ),
                     );
                   }
                 },
-                child: Icon(
-                  Icons.favorite,
-                  color: Colors.lightBlue[300],
-                  size: 28,
-                ),
+                child: const ChoiceLogoIcon(size: 30),
               ),
             ),
             title: GestureDetector(
@@ -122,7 +117,10 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () => AuthGuard.openClientCabinet(context, redirectToLogin: false),
+                  onPressed: () => AuthGuard.openClientCabinet(
+                    context,
+                    redirectToLogin: false,
+                  ),
                 ),
               ),
             ],
@@ -151,10 +149,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   const Text(
                     'Вход',
-                    style: TextStyle(
-                      fontSize: 24,
-                      fontWeight: FontWeight.bold,
-                    ),
+                    style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
                   ),
                   const SizedBox(height: 40),
 
@@ -165,7 +160,11 @@ class _LoginScreenState extends State<LoginScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
-                    child: _buildInputField(_passwordController, 'Пароль', isPassword: true),
+                    child: _buildInputField(
+                      _passwordController,
+                      'Пароль',
+                      isPassword: true,
+                    ),
                   ),
 
                   const SizedBox(height: 50),
@@ -177,7 +176,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (_loginController.text.trim().isEmpty ||
                             _passwordController.text.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Заполните логин и пароль')),
+                            const SnackBar(
+                              content: Text('Заполните логин и пароль'),
+                            ),
                           );
                           return;
                         }
@@ -188,7 +189,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         if (!mounted) return;
                         if (!ok) {
                           ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Неверный логин или пароль')),
+                            const SnackBar(
+                              content: Text('Неверный логин или пароль'),
+                            ),
                           );
                           return;
                         }
@@ -196,24 +199,29 @@ class _LoginScreenState extends State<LoginScreen> {
                         final isCompany = await AuthService.isCompany();
                         final isAdmin = await AuthService.isAdmin();
                         if (!mounted) return;
-                        
+
                         if (isAdmin) {
-                          // TODO: Переход на AdminPanelScreen
                           Navigator.pushAndRemoveUntil(
                             context,
-                            MaterialPageRoute(builder: (context) => const ClientTabNavigator()),
+                            MaterialPageRoute(
+                              builder: (context) => const AdminPanelScreen(),
+                            ),
                             (route) => false,
                           );
                         } else if (isCompany) {
                           Navigator.pushAndRemoveUntil(
                             context,
-                            MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+                            MaterialPageRoute(
+                              builder: (context) => const CompanyTabNavigator(),
+                            ),
                             (route) => false,
                           );
                         } else {
                           Navigator.pushAndRemoveUntil(
                             context,
-                            MaterialPageRoute(builder: (context) => const ClientTabNavigator()),
+                            MaterialPageRoute(
+                              builder: (context) => const ClientTabNavigator(),
+                            ),
                             (route) => false,
                           );
                         }
@@ -246,7 +254,9 @@ class _LoginScreenState extends State<LoginScreen> {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const ResetPasswordScreen()),
+                        MaterialPageRoute(
+                          builder: (context) => const ResetPasswordScreen(),
+                        ),
                       );
                     },
                     child: const Text(
@@ -265,7 +275,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => ClientRegistrationScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => ClientRegistrationScreen(),
+                          ),
                         );
                       },
                       child: Container(
@@ -298,7 +310,9 @@ class _LoginScreenState extends State<LoginScreen> {
                       onTap: () {
                         Navigator.push(
                           context,
-                          MaterialPageRoute(builder: (context) => CompanyLoginScreen()),
+                          MaterialPageRoute(
+                            builder: (context) => CompanyLoginScreen(),
+                          ),
                         );
                       },
                       child: Container(
@@ -333,7 +347,11 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildInputField(TextEditingController controller, String hint, {bool isPassword = false}) {
+  Widget _buildInputField(
+    TextEditingController controller,
+    String hint, {
+    bool isPassword = false,
+  }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6.0),
       child: Container(
@@ -370,7 +388,10 @@ class _LoginScreenState extends State<LoginScreen> {
             ),
             filled: true,
             fillColor: Colors.transparent,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 20,
+              vertical: 12,
+            ),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
               borderSide: BorderSide.none,
@@ -401,10 +422,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 padding: const EdgeInsets.all(16.0),
                 child: Text(
                   'Выберите город',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
               ),
               Expanded(
@@ -432,10 +450,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 }
 
@@ -448,11 +463,7 @@ class _PersonIconPainter extends CustomPainter {
 
     // Рисуем голову (круг)
     final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
+    canvas.drawCircle(Offset(size.width / 2, headRadius), headRadius, paint);
 
     // Рисуем тело (прямоугольник с вогнутой нижней частью - две "ножки")
     final bodyWidth = size.width * 0.7;

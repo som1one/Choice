@@ -10,6 +10,8 @@ import 'company_login_screen.dart';
 import 'welcome_screen.dart';
 import 'chats_screen.dart';
 import 'company_admin_cabinet_screen.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanySettingsScreen extends StatefulWidget {
   const CompanySettingsScreen({super.key});
@@ -45,7 +47,10 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   Map<String, dynamic>? _remoteProfile;
+  final Map<String, String> _socialLinks = {};
+  final List<String> _extraSocialLinks = [];
   final RemoteCompanyService _companyService = RemoteCompanyService();
+  static const String _menuLogoutValue = 'logout';
 
   @override
   void initState() {
@@ -148,6 +153,11 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             _controllers['Виды деятельности']!.text = activities;
           }
 
+          _restoreSocialLinks(
+            profile['social_medias'] ?? profile['socialMedias'],
+            overwrite: true,
+          );
+
           // Логотип из API
           final iconUri = profile['icon_uri'];
           if (iconUri != null && iconUri.toString().isNotEmpty) {
@@ -169,6 +179,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             _controllers[key]!.text = savedValue;
           }
         }
+        _restoreSocialLinks(savedData['socialLinks'], overwrite: true);
+        _restoreExtraSocialLinks(savedData['extraSocialLinks']);
 
         _isLoading = false;
       });
@@ -189,6 +201,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
               _controllers[key]!.text = savedValue;
             }
           }
+          _restoreSocialLinks(data['socialLinks'], overwrite: true);
+          _restoreExtraSocialLinks(data['extraSocialLinks']);
           _isLoading = false;
         });
       } else if (mounted) {
@@ -214,6 +228,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     for (final entry in _controllers.entries) {
       data['f_${entry.key}'] = entry.value.text.trim();
     }
+    data['socialLinks'] = Map<String, String>.from(_socialLinks);
+    data['extraSocialLinks'] = List<String>.from(_extraSocialLinks);
     await prefs.setString('company_settings', jsonEncode(data));
 
     bool savedToServer = !ApiConfig.isConfigured;
@@ -296,9 +312,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
           'site_url': siteUrl,
           'city': city,
           'street': street,
-          'social_medias': toStringList(
-            _remoteProfile?['social_medias'] ?? _remoteProfile?['socialMedias'],
-          ),
+          'social_medias': _buildSocialMediasPayload(),
           'photo_uris': toStringList(
             _remoteProfile?['photo_uris'] ?? _remoteProfile?['photoUris'],
           ),
@@ -354,35 +368,152 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     }
   }
 
+  String? _detectSocialPlatform(String url) {
+    final lower = url.toLowerCase();
+    if (lower.contains('instagram.com') || lower.contains('instagr.am')) {
+      return 'Instagram';
+    }
+    if (lower.contains('wa.me') ||
+        lower.contains('whatsapp.com') ||
+        lower.contains('whatsapp')) {
+      return 'WhatsApp';
+    }
+    if (lower.contains('t.me') || lower.contains('telegram')) {
+      return 'Telegram';
+    }
+    if (lower.contains('ok.ru') || lower.contains('odnoklassniki')) {
+      return 'OK';
+    }
+    if (lower.contains('youtube.com') || lower.contains('youtu.be')) {
+      return 'YouTube';
+    }
+    if (lower.contains('facebook.com') || lower.contains('fb.com')) {
+      return 'Facebook';
+    }
+    if (lower.contains('vk.com') || lower.contains('vkontakte')) {
+      return 'VK';
+    }
+    return null;
+  }
+
+  void _restoreSocialLinks(dynamic raw, {bool overwrite = false}) {
+    if (raw is Map) {
+      if (overwrite) {
+        _socialLinks.clear();
+      }
+      for (final entry in raw.entries) {
+        final key = entry.key.toString().trim();
+        final value = entry.value?.toString().trim() ?? '';
+        if (key.isEmpty || value.isEmpty) continue;
+        _socialLinks[key] = value;
+      }
+      return;
+    }
+
+    if (raw is! List) {
+      return;
+    }
+
+    if (overwrite) {
+      _socialLinks.clear();
+      _extraSocialLinks.clear();
+    }
+
+    for (final item in raw) {
+      final url = item.toString().trim();
+      if (url.isEmpty) continue;
+      final platform = _detectSocialPlatform(url);
+      if (platform == null) {
+        if (!_extraSocialLinks.contains(url)) {
+          _extraSocialLinks.add(url);
+        }
+        continue;
+      }
+      _socialLinks[platform] = url;
+    }
+  }
+
+  void _restoreExtraSocialLinks(dynamic raw) {
+    if (raw is! List) {
+      return;
+    }
+
+    for (final item in raw) {
+      final url = item.toString().trim();
+      if (url.isNotEmpty && !_extraSocialLinks.contains(url)) {
+        _extraSocialLinks.add(url);
+      }
+    }
+  }
+
+  List<String> _buildSocialMediasPayload() {
+    const orderedLabels = <String>[
+      'Instagram',
+      'WhatsApp',
+      'Telegram',
+      'OK',
+      'YouTube',
+      'Facebook',
+      'VK',
+    ];
+
+    final result = <String>[];
+    for (final label in orderedLabels) {
+      final url = _socialLinks[label]?.trim();
+      if (url != null && url.isNotEmpty) {
+        result.add(url);
+      }
+    }
+    for (final url in _extraSocialLinks) {
+      final trimmed = url.trim();
+      if (trimmed.isNotEmpty) {
+        result.add(trimmed);
+      }
+    }
+    return result.toSet().toList();
+  }
+
+  void _editSocialLink(String label) {
+    final controller = TextEditingController(text: _socialLinks[label] ?? '');
+    showDialog<void>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(label),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Вставьте ссылку на $label',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                final value = controller.text.trim();
+                if (value.isEmpty) {
+                  _socialLinks.remove(label);
+                } else {
+                  _socialLinks[label] = value;
+                }
+              });
+              Navigator.pop(context);
+            },
+            child: const Text('Сохранить'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _pickLogo() async {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
-
-    // Загружаем изображение на сервер
-    if (ApiConfig.isConfigured) {
-      try {
-        final fileService = RemoteFileService();
-        final filename = await fileService.uploadFile(image.path);
-
-        if (filename != null) {
-          // Обновляем иконку через API
-          final companyService = RemoteCompanyService();
-          await companyService.changeIconUri(filename);
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Не удалось загрузить логотип на сервер'),
-            ),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ошибка загрузки логотипа на сервер')),
-          );
-        }
-      }
-    }
 
     setState(() {
       _logoPath = image.path;
@@ -400,6 +531,40 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Логотип обновлен')));
+
+    if (ApiConfig.isConfigured) {
+      try {
+        final fileService = RemoteFileService();
+        final filename = await fileService.uploadFile(image.path);
+
+        if (filename != null) {
+          final companyService = RemoteCompanyService();
+          await companyService.changeIconUri(filename);
+          final remotePath = '${ApiConfig.fileBaseUrl}/api/objects/$filename';
+          if (!mounted) return;
+          setState(() {
+            _logoPath = remotePath;
+          });
+
+          data['logoPath'] = remotePath;
+          await prefs.setString('company_settings', jsonEncode(data));
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Логотип сохранен локально, но сервер не принял файл'),
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Логотип сохранен локально, загрузка на сервер не удалась'),
+            ),
+          );
+        }
+      }
+    }
   }
 
   void _showInstructions() {
@@ -469,8 +634,8 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
                         number: '3',
                         title: 'Соцсети',
                         content:
-                            'Внизу окна можно выбрать иконки соцсетей, чтобы добавить '
-                            'социальную сеть компании в карточку компании.',
+                            'Нажмите на иконку нужной соцсети внизу окна, чтобы '
+                            'добавить или изменить ссылку для карточки компании.',
                       ),
                       SizedBox(height: 16),
                       _InstructionItem(
@@ -544,41 +709,7 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.lightBlue[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'V',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: const ChoiceLogoIcon(size: 32),
             ),
             title: const Text(
               'НАСТРОЙКИ КОМПАНИИ',
@@ -590,6 +721,27 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
             ),
             centerTitle: true,
             actions: [
+              PopupMenuButton<String>(
+                tooltip: 'Меню',
+                icon: const Icon(Icons.more_vert, color: Colors.black),
+                onSelected: (value) {
+                  if (value == _menuLogoutValue) {
+                    _handleLogout();
+                  }
+                },
+                itemBuilder: (context) => const [
+                  PopupMenuItem<String>(
+                    value: _menuLogoutValue,
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, color: Colors.red),
+                        SizedBox(width: 10),
+                        Text('Выйти из профиля'),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
@@ -693,21 +845,56 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
 
               const SizedBox(height: 24),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              const Text(
+                'Соцсети компании',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Нажмите на кнопку, чтобы добавить или изменить ссылку.',
+                style: TextStyle(fontSize: 13, color: Colors.black54),
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
                 children: [
-                  _buildSocialIcon(Icons.share, Colors.purple),
-                  _buildSocialIcon(Icons.message, Colors.green),
-                  _buildSocialIcon(Icons.telegram, Colors.blue),
-                  _buildSocialIcon(Icons.circle, Colors.orange), // OK
+                  _buildSocialIcon('Instagram', Icons.share, Colors.purple),
+                  _buildSocialIcon('WhatsApp', Icons.message, Colors.green),
+                  _buildSocialIcon('Telegram', Icons.telegram, Colors.blue),
+                  _buildSocialIcon('OK', Icons.circle, Colors.orange),
                   _buildSocialIcon(
+                    'YouTube',
                     Icons.play_circle_filled,
                     Colors.red,
-                  ), // YouTube
-                  _buildSocialIcon(Icons.facebook, Colors.blue),
-                  _buildSocialIcon(Icons.circle, Colors.blue[900]!), // VK
+                  ),
+                  _buildSocialIcon('Facebook', Icons.facebook, Colors.blue),
+                  _buildSocialIcon('VK', Icons.circle, Colors.blue[900]!),
                 ],
               ),
+              if (_socialLinks.isNotEmpty || _extraSocialLinks.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                ...[
+                  'Instagram',
+                  'WhatsApp',
+                  'Telegram',
+                  'OK',
+                  'YouTube',
+                  'Facebook',
+                  'VK',
+                ].where((label) => (_socialLinks[label] ?? '').trim().isNotEmpty).map(
+                  (label) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('$label: ${_socialLinks[label]}'),
+                  ),
+                ),
+                ..._extraSocialLinks.map(
+                  (url) => Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Text('Доп. ссылка: $url'),
+                  ),
+                ),
+              ],
 
               const SizedBox(height: 24),
 
@@ -911,53 +1098,67 @@ class _CompanySettingsScreenState extends State<CompanySettingsScreen> {
     );
   }
 
-  Widget _buildSocialIcon(IconData icon, Color color) {
-    return Container(
-      width: 40,
-      height: 40,
-      decoration: BoxDecoration(
-        color: color,
-        borderRadius: BorderRadius.circular(4),
+  Widget _buildSocialIcon(String label, IconData icon, Color color) {
+    final selected = (_socialLinks[label] ?? '').trim().isNotEmpty;
+    return GestureDetector(
+      onTap: () => _editSocialLink(label),
+      child: Container(
+        width: 46,
+        height: 46,
+        decoration: BoxDecoration(
+          color: color,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: selected ? Colors.black : Colors.transparent,
+            width: 2,
+          ),
+        ),
+        child: Icon(icon, color: Colors.white, size: 24),
       ),
-      child: Icon(icon, color: Colors.white, size: 24),
     );
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
+    return ProfileCornerIcon(
+      userType: UserType.company,
+      imagePath: _logoPath,
+      size: 28,
+    );
+  }
+
+  Future<void> _handleLogout() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Выход'),
+        content: const Text('Вы уверены, что хотите выйти?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Выйти', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirm != true || !mounted) return;
+
+    await AuthService.logout();
+    if (!mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const WelcomeScreen()),
+      (route) => false,
+    );
   }
 
   Widget _buildLogoutButton() {
     return GestureDetector(
-      onTap: () async {
-        final confirm = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Выход'),
-            content: const Text('Вы уверены, что хотите выйти?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Отмена'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Выйти', style: TextStyle(color: Colors.red)),
-              ),
-            ],
-          ),
-        );
-        if (confirm == true && mounted) {
-          await AuthService.logout();
-          if (mounted) {
-            Navigator.pushAndRemoveUntil(
-              context,
-              MaterialPageRoute(builder: (_) => const WelcomeScreen()),
-              (route) => false,
-            );
-          }
-        }
-      },
+      onTap: _handleLogout,
       child: Container(
         width: double.infinity,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),

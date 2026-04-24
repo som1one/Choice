@@ -1,0 +1,171 @@
+diff --git a/backend_fastapi/services/authentication/services/phone_verification.py b/backend_fastapi/services/authentication/services/phone_verification.py
+index fb6bf8bb..4be9bc31 100644
+--- a/backend_fastapi/services/authentication/services/phone_verification.py
++++ b/backend_fastapi/services/authentication/services/phone_verification.py
+@@ -1,9 +1,14 @@
+ """Сервис верификации телефона через Vonage"""
+-from vonage import Sms, Client
+ from pydantic_settings import BaseSettings
+ import random
+ from typing import Dict
+ 
++try:
++    from vonage import Sms, Client  # type: ignore
++except Exception:
++    Sms = None
++    Client = None
++
+ class VonageSettings(BaseSettings):
+     vonage_api_key: str | None = None
+     vonage_api_secret: str | None = None
+@@ -15,7 +20,7 @@ class VonageSettings(BaseSettings):
+ 
+ settings = VonageSettings()
+ # Создаем клиент только если ключи заданы
+-if settings.vonage_api_key and settings.vonage_api_secret:
++if Client and Sms and settings.vonage_api_key and settings.vonage_api_secret:
+     client = Client(key=settings.vonage_api_key, secret=settings.vonage_api_secret)
+     sms = Sms(client)
+ else:
+diff --git a/backend_fastapi/services/ordering/database.py b/backend_fastapi/services/ordering/database.py
+index 565a39b7..784e0bf8 100644
+--- a/backend_fastapi/services/ordering/database.py
++++ b/backend_fastapi/services/ordering/database.py
+@@ -57,7 +57,11 @@ def init_db():
+                 cleanup_statements = [
+                     f"UPDATE {table_name} SET reviews = {_empty_reviews_sql()} WHERE reviews IS NULL",
+                     f"UPDATE {table_name} SET is_enrolled = 0 WHERE is_enrolled IS NULL",
+-                    f"UPDATE {table_name} SET is_date_confirmed = 1 WHERE is_date_confirmed IS NULL",
++                    f"UPDATE {table_name} SET is_date_confirmed = 0 WHERE is_date_confirmed IS NULL",
++                    (
++                        f"UPDATE {table_name} SET is_date_confirmed = 0 "
++                        f"WHERE is_enrolled = 0 AND status = 1"
++                    ),
+                     f"UPDATE {table_name} SET status = 1 WHERE status IS NULL",
+                     f"UPDATE {table_name} SET prepayment = 0 WHERE prepayment IS NULL",
+                     f"UPDATE {table_name} SET deadline = 0 WHERE deadline IS NULL",
+diff --git a/backend_fastapi/services/ordering/models.py b/backend_fastapi/services/ordering/models.py
+index a1d89ddf..1a2fd328 100644
+--- a/backend_fastapi/services/ordering/models.py
++++ b/backend_fastapi/services/ordering/models.py
+@@ -30,7 +30,8 @@ class Order(Base):
+     specialist_phone = Column(String, nullable=True)
+     enrollment_date = Column(DateTime, nullable=True)
+     is_enrolled = Column(Boolean, default=False)
+-    is_date_confirmed = Column(Boolean, default=True)
++    # Дата подтверждается только после явного действия второй стороны.
++    is_date_confirmed = Column(Boolean, default=False)
+     # Используем ARRAY для PostgreSQL и JSON для SQLite
+     reviews = (Column(PG_ARRAY(String), default=[]) if _is_postgresql 
+                else Column(JSON, default=lambda: []))
+diff --git a/backend_fastapi/services/ordering/routers/order.py b/backend_fastapi/services/ordering/routers/order.py
+index 74c17d78..9aabd5e6 100644
+--- a/backend_fastapi/services/ordering/routers/order.py
++++ b/backend_fastapi/services/ordering/routers/order.py
+@@ -30,7 +30,7 @@ def _normalize_order(order: Order) -> Order:
+     if order.is_enrolled is None:
+         order.is_enrolled = False
+     if order.is_date_confirmed is None:
+-        order.is_date_confirmed = True
++        order.is_date_confirmed = False
+     if order.status is None:
+         order.status = OrderStatus.ACTIVE.value
+     return order
+@@ -56,6 +56,10 @@ async def create_order(
+     # Проверка, нет ли уже заказа
+     existing = await repo.get_by_request_and_company(request.order_request_id, company_id)
+     if existing:
++        date_changed = (
++            request.enrollment_date is not None and
++            request.enrollment_date != existing.enrollment_date
++        )
+         # Повторный отклик по той же заявке трактуем как обновление существующего заказа
+         if request.price is not None:
+             existing.price = request.price
+@@ -71,6 +75,10 @@ async def create_order(
+             existing.specialist_phone = request.specialist_phone
+         if request.enrollment_date is not None:
+             existing.enrollment_date = request.enrollment_date
++        if date_changed:
++            # После изменения предложенной даты запись требует нового подтверждения клиента.
++            existing.is_date_confirmed = False
++            existing.is_enrolled = False
+ 
+         updated = await repo.update(existing)
+         if not updated:
+@@ -111,6 +119,8 @@ async def create_order(
+         specialist_name=request.specialist_name,
+         specialist_phone=request.specialist_phone,
+         enrollment_date=request.enrollment_date,
++        is_enrolled=False,
++        is_date_confirmed=False,
+         status=OrderStatus.ACTIVE.value
+     )
+     
+@@ -223,6 +233,7 @@ async def enroll(
+             detail="Order not found"
+         )
+     
++    order.is_date_confirmed = True
+     order.is_enrolled = True
+     result = await repo.update(order)
+     
+@@ -381,7 +392,9 @@ async def change_enrollment_date(
+         )
+     
+     order.enrollment_date = request.enrollment_date
+-    order.is_date_confirmed = (user_id != order.client_id)
++    # После любого изменения предложенной даты требуется новое подтверждение второй стороны.
++    order.is_date_confirmed = False
++    order.is_enrolled = False
+     order.user_changed_enrollment_date_guid = user_id
+     result = await repo.update(order)
+     
+@@ -515,6 +528,7 @@ async def cancel_enrollment(
+         )
+     
+     order.is_enrolled = False
++    order.is_date_confirmed = False
+     order.enrollment_date = None
+     result = await repo.update(order)
+     
+diff --git a/backend_fastapi/services/ordering/schemas.py b/backend_fastapi/services/ordering/schemas.py
+index 58b0bd36..58820b27 100644
+--- a/backend_fastapi/services/ordering/schemas.py
++++ b/backend_fastapi/services/ordering/schemas.py
+@@ -17,7 +17,7 @@ class OrderResponse(BaseModel):
+     specialist_phone: Optional[str]
+     enrollment_date: Optional[datetime]
+     is_enrolled: bool = False
+-    is_date_confirmed: bool = True
++    is_date_confirmed: bool = False
+     reviews: List[str] = Field(default_factory=list)
+     status: int = 1
+     user_changed_enrollment_date_guid: Optional[str]
+@@ -35,7 +35,7 @@ class OrderResponse(BaseModel):
+     @field_validator("is_date_confirmed", mode="before")
+     @classmethod
+     def _normalize_is_date_confirmed(cls, value):
+-        return True if value is None else value
++        return False if value is None else value
+ 
+     @field_validator("status", mode="before")
+     @classmethod
+diff --git a/backend_fastapi/start_all.sh b/backend_fastapi/start_all.sh
+index 0169a93e..71eeadc2 100644
+--- a/backend_fastapi/start_all.sh
++++ b/backend_fastapi/start_all.sh
+@@ -41,10 +41,12 @@ start_service() {
+     local name=$1
+     local port=$2
+     local module=$3
++    local log_name
++    log_name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
+     
+     echo "Starting $name on port $port..."
+     # Важно: запускаем из корня backend_fastapi, чтобы работали импорты пакета `services.*`
+-    PYTHONPATH="$(pwd)" "$PYTHON_BIN" -m uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${name,,}.log" 2>&1 &
++    PYTHONPATH="$(pwd)" "$PYTHON_BIN" -m uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${log_name}.log" 2>&1 &
+     sleep 1
+ }
+ 

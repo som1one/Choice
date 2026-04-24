@@ -36,7 +36,6 @@ dependencies:
   cupertino_icons: ^1.0.8
   shared_preferences: ^2.2.2
   image_picker: ^1.0.7
-  file_picker: ^10.3.10
   speech_to_text: ^7.3.0
   permission_handler: ^11.3.0
   crypto: ^3.0.3
@@ -71,6 +70,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - assets/images/world_map.jpg
+    - assets/images/choice-logo.png
 
   # An image asset can refer to one or more resolution-specific "variants", see
   # https://flutter.dev/to/resolution-aware-images

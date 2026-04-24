@@ -727,7 +727,9 @@ class _ChatScreenState extends State<ChatScreen> {
         orderData['IsEnrolled'] ?? orderData['is_enrolled'] ?? false;
     final status = orderData['Status'] ?? orderData['status'] ?? 1;
     final isDateConfirmed =
-        orderData['IsDateConfirmed'] ?? orderData['is_date_confirmed'] ?? true;
+        isEnrolled ||
+        orderData['IsDateConfirmed'] == true ||
+        orderData['is_date_confirmed'] == true;
 
     return Align(
       alignment: isMine ? Alignment.centerRight : Alignment.centerLeft,

@@ -17,7 +17,7 @@ class OrderResponse(BaseModel):
     specialist_phone: Optional[str]
     enrollment_date: Optional[datetime]
     is_enrolled: bool = False
-    is_date_confirmed: bool = True
+    is_date_confirmed: bool = False
     reviews: List[str] = Field(default_factory=list)
     status: int = 1
     user_changed_enrollment_date_guid: Optional[str]
@@ -35,7 +35,7 @@ class OrderResponse(BaseModel):
     @field_validator("is_date_confirmed", mode="before")
     @classmethod
     def _normalize_is_date_confirmed(cls, value):
-        return True if value is None else value
+        return False if value is None else value
 
     @field_validator("status", mode="before")
     @classmethod

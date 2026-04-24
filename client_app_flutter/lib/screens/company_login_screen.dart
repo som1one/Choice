@@ -2,11 +2,13 @@
 
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
-import 'company_inquiries_screen.dart';
 import 'client_registration_screen.dart';
 import '../utils/auth_guard.dart';
 import 'admin_login_screen.dart';
+import 'admin_panel_screen.dart';
 import '../navigation/company_tab_navigator.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanyLoginScreen extends StatefulWidget {
   const CompanyLoginScreen({super.key});
@@ -46,9 +48,9 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
 
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Заполните все поля')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Заполните все поля')));
       return;
     }
     final ok = await AuthService.loginCompany(
@@ -62,17 +64,15 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
       );
       return;
     }
-    
+
     // Проверяем тип пользователя и переходим на соответствующий экран
-    final isCompany = await AuthService.isCompany();
     final isAdmin = await AuthService.isAdmin();
     if (!mounted) return;
-    
+
     if (isAdmin) {
-      // TODO: Переход на AdminPanelScreen
       Navigator.pushAndRemoveUntil(
         context,
-        MaterialPageRoute(builder: (context) => const CompanyTabNavigator()),
+        MaterialPageRoute(builder: (context) => const AdminPanelScreen()),
         (route) => false,
       );
     } else {
@@ -85,10 +85,7 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(28, 28),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.company, size: 28);
   }
 
   @override
@@ -98,9 +95,7 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
           decoration: const BoxDecoration(
-            border: Border(
-              bottom: BorderSide(color: Colors.black, width: 3.0),
-            ),
+            border: Border(bottom: BorderSide(color: Colors.black, width: 3.0)),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
@@ -114,7 +109,7 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                     MaterialPageRoute(builder: (_) => const AdminLoginScreen()),
                   );
                 },
-                child: const Icon(Icons.favorite, color: Colors.lightBlue, size: 32),
+                child: const ChoiceLogoIcon(size: 32),
               ),
             ),
             title: Row(
@@ -150,7 +145,10 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
                   icon: _buildPersonIcon(),
-                  onPressed: () => AuthGuard.openCompanySettings(context, redirectToLogin: false),
+                  onPressed: () => AuthGuard.openCompanySettings(
+                    context,
+                    redirectToLogin: false,
+                  ),
                 ),
               ),
             ],
@@ -190,7 +188,10 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 1,
@@ -211,7 +212,10 @@ class _CompanyLoginScreenState extends State<CompanyLoginScreen> {
                             borderRadius: BorderRadius.circular(10),
                             borderSide: BorderSide.none,
                           ),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                         ),
                         textAlign: TextAlign.center,
                         maxLines: 1,

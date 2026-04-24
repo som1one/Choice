@@ -57,8 +57,13 @@ def init_db():
                 cleanup_statements = [
                     f"UPDATE {table_name} SET reviews = {_empty_reviews_sql()} WHERE reviews IS NULL",
                     f"UPDATE {table_name} SET is_enrolled = 0 WHERE is_enrolled IS NULL",
-                    f"UPDATE {table_name} SET is_date_confirmed = 1 WHERE is_date_confirmed IS NULL",
+                    f"UPDATE {table_name} SET is_date_confirmed = 0 WHERE is_date_confirmed IS NULL",
+                    (
+                        f"UPDATE {table_name} SET is_date_confirmed = 0 "
+                        f"WHERE is_enrolled = 0 AND status = 1"
+                    ),
                     f"UPDATE {table_name} SET status = 1 WHERE status IS NULL",
+                    f"UPDATE {table_name} SET status = 1 WHERE status = 0",
                     f"UPDATE {table_name} SET prepayment = 0 WHERE prepayment IS NULL",
                     f"UPDATE {table_name} SET deadline = 0 WHERE deadline IS NULL",
                     f"UPDATE {table_name} SET price = 0 WHERE price IS NULL",

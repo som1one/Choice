@@ -2,6 +2,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart' show kReleaseMode;
+import 'package:http/http.dart' as http;
 import 'api_config.dart';
 import 'remote_auth_service.dart';
 import 'auth_token_store.dart';
@@ -22,10 +23,16 @@ class AuthService {
   static const String _testCompanyAdminPassword = '123456';
 
   // Админ (задается при сборке через dart-define)
-  static const String _adminEmail =
-      String.fromEnvironment('ADMIN_EMAIL', defaultValue: 'admin@choice.local');
-  static const String _adminPassword =
-      String.fromEnvironment('ADMIN_PASSWORD', defaultValue: 'admin123456');
+  static const String _adminEmail = String.fromEnvironment(
+    'ADMIN_EMAIL',
+    defaultValue: 'admin@choice.local',
+  );
+  static const String _adminPassword = String.fromEnvironment(
+    'ADMIN_PASSWORD',
+    defaultValue: 'admin12345',
+  );
+  static const String _legacyAdminEmail = 'admin@choice-app.com';
+  static const String _legacyAdminPassword = 'admin123456';
   static final RemoteAuthService _remoteAuth = RemoteAuthService();
 
   static String _hashPassword(String password) {
@@ -52,6 +59,80 @@ class AuthService {
       return decoded is Map<String, dynamic> ? decoded : null;
     } catch (_) {
       return null;
+    }
+  }
+
+  static bool _isLocalAdminCredentials(String email, String password) {
+    final candidate = email.trim().toLowerCase();
+    final allowedEmails = <String>{
+      _adminEmail.trim().toLowerCase(),
+      _legacyAdminEmail,
+    };
+    final allowedPasswords = <String>{
+      _adminPassword,
+      _legacyAdminPassword,
+    };
+    return allowedEmails.contains(candidate) &&
+        allowedPasswords.contains(password);
+  }
+
+  static Future<void> _completeAdminLogin(String email, {String? token}) async {
+    final candidate = email.trim().toLowerCase();
+    await setLoggedIn(true, userType: UserType.admin);
+    final prefs = await SharedPreferences.getInstance();
+    if (token != null && token.isNotEmpty) {
+      await prefs.setString(_authTokenKey, token);
+      await AuthTokenStore.setToken(token);
+    }
+    await prefs.setString(
+      _adminCredentialsKey,
+      jsonEncode({'email': candidate}),
+    );
+  }
+
+  static Future<bool> _tryRemoteAdminLogin(
+    String email,
+    String password,
+  ) async {
+    if (!ApiConfig.isConfigured) return false;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('${ApiConfig.authBaseUrl}/api/auth/login'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'email': email.trim().toLowerCase(),
+              'password': password,
+            }),
+          )
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) {
+        return false;
+      }
+
+      final token = (decoded['access_token'] as String?) ??
+          (decoded['token'] as String?) ??
+          (decoded['accessToken'] as String?);
+      if (token == null || token.isEmpty) {
+        return false;
+      }
+
+      final payload = _decodeJwtPayload(token);
+      if (payload?['user_type']?.toString() != 'Admin') {
+        return false;
+      }
+
+      await _completeAdminLogin(email, token: token);
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
@@ -123,9 +204,12 @@ class AuthService {
             final userTypeStr = payload['user_type']?.toString();
             if (userTypeStr != null) {
               UserType? userType;
-              if (userTypeStr == 'Client') userType = UserType.client;
-              else if (userTypeStr == 'Company') userType = UserType.company;
-              else if (userTypeStr == 'Admin') userType = UserType.admin;
+              if (userTypeStr == 'Client')
+                userType = UserType.client;
+              else if (userTypeStr == 'Company')
+                userType = UserType.company;
+              else if (userTypeStr == 'Admin')
+                userType = UserType.admin;
               if (userType != null) {
                 await setLoggedIn(true, userType: userType);
               }
@@ -188,6 +272,10 @@ class AuthService {
     required String loginOrEmail,
     required String password,
   }) async {
+    if (_isLocalAdminCredentials(loginOrEmail, password)) {
+      return loginAdmin(email: loginOrEmail, password: password);
+    }
+
     // Встроенный тестовый аккаунт клиента-админа
     if (!kReleaseMode &&
         loginOrEmail.trim().toLowerCase() == _testClientAdminEmail &&
@@ -208,14 +296,16 @@ class AuthService {
           final token = remoteResult.token!;
           await prefs.setString(_authTokenKey, token);
           await AuthTokenStore.setToken(token);
-          
+
           // Определяем userType из токена
           final payload = _decodeJwtPayload(token);
           UserType? userType = UserType.client; // По умолчанию клиент
           if (payload != null) {
             final userTypeStr = payload['user_type']?.toString();
-            if (userTypeStr == 'Company') userType = UserType.company;
-            else if (userTypeStr == 'Admin') userType = UserType.admin;
+            if (userTypeStr == 'Company')
+              userType = UserType.company;
+            else if (userTypeStr == 'Admin')
+              userType = UserType.admin;
           }
           await setLoggedIn(true, userType: userType);
         } else {
@@ -232,7 +322,8 @@ class AuthService {
     final savedEmail = (data['email'] as String? ?? '').toLowerCase();
     final savedPassword = data['password'] as String? ?? '';
     final candidate = loginOrEmail.trim().toLowerCase();
-    final ok = candidate == savedEmail && _verifyPassword(savedPassword, password);
+    final ok =
+        candidate == savedEmail && _verifyPassword(savedPassword, password);
     if (ok) {
       if (!savedPassword.startsWith('sha256:')) {
         data['password'] = _hashPassword(password);
@@ -268,8 +359,12 @@ class AuthService {
     String? street,
   }) async {
     final normalizedInn = (inn ?? '').trim();
-    final normalizedCity = (city ?? '-').trim().isEmpty ? '-' : (city ?? '-').trim();
-    final normalizedStreet = (street ?? '-').trim().isEmpty ? '-' : (street ?? '-').trim();
+    final normalizedCity = (city ?? '-').trim().isEmpty
+        ? '-'
+        : (city ?? '-').trim();
+    final normalizedStreet = (street ?? '-').trim().isEmpty
+        ? '-'
+        : (street ?? '-').trim();
 
     String? remoteToken;
     if (ApiConfig.isConfigured) {
@@ -296,10 +391,11 @@ class AuthService {
       'city': normalizedCity,
       'street': normalizedStreet,
       'phoneNumber': phoneNumber.trim(),
-      if (companyType != null && companyType.trim().isNotEmpty) 'companyType': companyType.trim(),
+      if (companyType != null && companyType.trim().isNotEmpty)
+        'companyType': companyType.trim(),
     });
     await prefs.setString(_companyCredentialsKey, payload);
-    
+
     // Сохраняем данные регистрации в настройки компании для отображения в профиле
     String addressText = '';
     if (normalizedCity != '-' && normalizedStreet != '-') {
@@ -309,7 +405,7 @@ class AuthService {
     } else if (normalizedStreet != '-') {
       addressText = normalizedStreet;
     }
-    
+
     final companySettings = jsonEncode({
       'f_Название': companyName.trim(),
       'f_Mail': email.trim().toLowerCase(),
@@ -317,22 +413,25 @@ class AuthService {
       if (addressText.isNotEmpty) 'f_Адрес': addressText,
     });
     await prefs.setString('company_settings', companySettings);
-    
+
     // Сохраняем токен в двух местах
     if (remoteToken != null && remoteToken.isNotEmpty) {
       await prefs.setString(_authTokenKey, remoteToken);
       await AuthTokenStore.setToken(remoteToken);
-      
+
       // Определяем userType из токена
       final payload = _decodeJwtPayload(remoteToken);
       UserType? userType = UserType.company; // По умолчанию компания
       if (payload != null) {
         final userTypeStr = payload['user_type']?.toString();
-        if (userTypeStr == 'Client') userType = UserType.client;
-        else if (userTypeStr == 'Company') userType = UserType.company;
-        else if (userTypeStr == 'Admin') userType = UserType.admin;
+        if (userTypeStr == 'Client')
+          userType = UserType.client;
+        else if (userTypeStr == 'Company')
+          userType = UserType.company;
+        else if (userTypeStr == 'Admin')
+          userType = UserType.admin;
       }
-      
+
       // Устанавливаем статусы с правильным userType из токена
       await setRegistered(true, userType: userType);
       await setLoggedIn(true, userType: userType);
@@ -349,9 +448,18 @@ class AuthService {
   }) async {
     final candidate = email.trim().toLowerCase();
 
+    if (_isLocalAdminCredentials(candidate, password)) {
+      if (await _tryRemoteAdminLogin(candidate, password)) {
+        return true;
+      }
+      await _completeAdminLogin(candidate);
+      return true;
+    }
+
     // Сначала пробуем реальный бек-логин (нужен токен с user_type=Admin)
     if (ApiConfig.isConfigured) {
-      final remote = await _remoteAuth.loginClient( // тот же /api/auth/login
+      final remote = await _remoteAuth.loginClient(
+        // тот же /api/auth/login
         email: candidate,
         password: password,
       );
@@ -360,29 +468,16 @@ class AuthService {
         final payload = _decodeJwtPayload(token);
         final userType = payload?['user_type']?.toString();
         if (userType == 'Admin') {
-          await AuthTokenStore.setToken(token);
-          await setLoggedIn(true, userType: UserType.admin);
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(_adminCredentialsKey, jsonEncode({'email': candidate}));
+          await _completeAdminLogin(candidate, token: token);
           return true;
         }
       }
     }
-
-    // Локальный фолбэк (для dev/offline)
-    final ok = candidate == _adminEmail.trim().toLowerCase() && password == _adminPassword;
-    if (!ok) return false;
-    await setLoggedIn(true, userType: UserType.admin);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_adminCredentialsKey, jsonEncode({'email': candidate}));
-    return true;
+    return false;
   }
 
   static Map<String, String> getAdminCredentialsHint() {
-    return {
-      'email': _adminEmail,
-      'password': _adminPassword,
-    };
+    return {'email': _adminEmail, 'password': _adminPassword};
   }
 
   /// Универсальный метод входа, который определяет тип пользователя из токена
@@ -391,14 +486,21 @@ class AuthService {
     required String password,
   }) async {
     final normalizedEmail = email.trim().toLowerCase();
-    
+
+    if (_isLocalAdminCredentials(normalizedEmail, password)) {
+      final ok = await loginAdmin(email: normalizedEmail, password: password);
+      return ok ? UserType.admin : null;
+    }
+
     // Проверяем тестовые аккаунты
     if (!kReleaseMode) {
-      if (normalizedEmail == _testClientAdminEmail && password == _testClientAdminPassword) {
+      if (normalizedEmail == _testClientAdminEmail &&
+          password == _testClientAdminPassword) {
         await setLoggedIn(true, userType: UserType.client);
         return UserType.client;
       }
-      if (normalizedEmail == _testCompanyAdminEmail && password == _testCompanyAdminPassword) {
+      if (normalizedEmail == _testCompanyAdminEmail &&
+          password == _testCompanyAdminPassword) {
         await setLoggedIn(true, userType: UserType.company);
         return UserType.company;
       }
@@ -416,42 +518,48 @@ class AuthService {
           final token = remoteResult.token!;
           await prefs.setString(_authTokenKey, token);
           await AuthTokenStore.setToken(token);
-          
+
           // Определяем userType из токена
           final payload = _decodeJwtPayload(token);
           UserType? userType;
           if (payload != null) {
             final userTypeStr = payload['user_type']?.toString();
-            if (userTypeStr == 'Client') userType = UserType.client;
-            else if (userTypeStr == 'Company') userType = UserType.company;
-            else if (userTypeStr == 'Admin') userType = UserType.admin;
+            if (userTypeStr == 'Client')
+              userType = UserType.client;
+            else if (userTypeStr == 'Company')
+              userType = UserType.company;
+            else if (userTypeStr == 'Admin')
+              userType = UserType.admin;
           }
-          
+
           // Если тип не определен из токена, пробуем определить из локальных данных
           if (userType == null) {
             // Проверяем локальные данные клиента
             final clientRaw = prefs.getString(_clientCredentialsKey);
             if (clientRaw != null) {
               final clientData = jsonDecode(clientRaw) as Map<String, dynamic>;
-              final savedEmail = (clientData['email'] as String? ?? '').toLowerCase();
+              final savedEmail = (clientData['email'] as String? ?? '')
+                  .toLowerCase();
               if (normalizedEmail == savedEmail) {
                 userType = UserType.client;
               }
             }
-            
+
             // Если не клиент, проверяем компанию
             if (userType == null) {
               final companyRaw = prefs.getString(_companyCredentialsKey);
               if (companyRaw != null) {
-                final companyData = jsonDecode(companyRaw) as Map<String, dynamic>;
-                final savedEmail = (companyData['email'] as String? ?? '').toLowerCase();
+                final companyData =
+                    jsonDecode(companyRaw) as Map<String, dynamic>;
+                final savedEmail = (companyData['email'] as String? ?? '')
+                    .toLowerCase();
                 if (normalizedEmail == savedEmail) {
                   userType = UserType.company;
                 }
               }
             }
           }
-          
+
           // Если тип все еще не определен, используем Client по умолчанию
           userType ??= UserType.client;
           await setLoggedIn(true, userType: userType);
@@ -462,14 +570,15 @@ class AuthService {
 
     // Fallback на локальные данные
     final prefs = await SharedPreferences.getInstance();
-    
+
     // Проверяем клиента
     final clientRaw = prefs.getString(_clientCredentialsKey);
     if (clientRaw != null) {
       final clientData = jsonDecode(clientRaw) as Map<String, dynamic>;
       final savedEmail = (clientData['email'] as String? ?? '').toLowerCase();
       final savedPassword = clientData['password'] as String? ?? '';
-      if (normalizedEmail == savedEmail && _verifyPassword(savedPassword, password)) {
+      if (normalizedEmail == savedEmail &&
+          _verifyPassword(savedPassword, password)) {
         if (!savedPassword.startsWith('sha256:')) {
           clientData['password'] = _hashPassword(password);
           await prefs.setString(_clientCredentialsKey, jsonEncode(clientData));
@@ -478,23 +587,27 @@ class AuthService {
         return UserType.client;
       }
     }
-    
+
     // Проверяем компанию
     final companyRaw = prefs.getString(_companyCredentialsKey);
     if (companyRaw != null) {
       final companyData = jsonDecode(companyRaw) as Map<String, dynamic>;
       final savedEmail = (companyData['email'] as String? ?? '').toLowerCase();
       final savedPassword = companyData['password'] as String? ?? '';
-      if (normalizedEmail == savedEmail && _verifyPassword(savedPassword, password)) {
+      if (normalizedEmail == savedEmail &&
+          _verifyPassword(savedPassword, password)) {
         if (!savedPassword.startsWith('sha256:')) {
           companyData['password'] = _hashPassword(password);
-          await prefs.setString(_companyCredentialsKey, jsonEncode(companyData));
+          await prefs.setString(
+            _companyCredentialsKey,
+            jsonEncode(companyData),
+          );
         }
         await setLoggedIn(true, userType: UserType.company);
         return UserType.company;
       }
     }
-    
+
     return null;
   }
 
@@ -502,6 +615,10 @@ class AuthService {
     required String email,
     required String password,
   }) async {
+    if (_isLocalAdminCredentials(email, password)) {
+      return loginAdmin(email: email, password: password);
+    }
+
     // Встроенный тестовый аккаунт компании-админа (только debug/profile)
     if (!kReleaseMode &&
         email.trim().toLowerCase() == _testCompanyAdminEmail &&
@@ -522,14 +639,16 @@ class AuthService {
           final token = remoteResult.token!;
           await prefs.setString(_authTokenKey, token);
           await AuthTokenStore.setToken(token);
-          
+
           // Определяем userType из токена
           final payload = _decodeJwtPayload(token);
           UserType? userType = UserType.company; // По умолчанию компания
           if (payload != null) {
             final userTypeStr = payload['user_type']?.toString();
-            if (userTypeStr == 'Client') userType = UserType.client;
-            else if (userTypeStr == 'Admin') userType = UserType.admin;
+            if (userTypeStr == 'Client')
+              userType = UserType.client;
+            else if (userTypeStr == 'Admin')
+              userType = UserType.admin;
           }
           await setLoggedIn(true, userType: userType);
         } else {
@@ -545,7 +664,8 @@ class AuthService {
     final data = jsonDecode(raw) as Map<String, dynamic>;
     final savedEmail = (data['email'] as String? ?? '').toLowerCase();
     final savedPassword = data['password'] as String? ?? '';
-    final ok = email.trim().toLowerCase() == savedEmail &&
+    final ok =
+        email.trim().toLowerCase() == savedEmail &&
         _verifyPassword(savedPassword, password);
     if (ok) {
       if (!savedPassword.startsWith('sha256:')) {
@@ -566,10 +686,10 @@ class AuthService {
   static Future<String?> getCurrentUserId() async {
     final token = await getAuthToken();
     if (token == null || token.isEmpty) return null;
-    
+
     final payload = _decodeJwtPayload(token);
     if (payload == null) return null;
-    
+
     // ID может быть в поле 'id' или 'user_id'
     final id = payload['id'] ?? payload['user_id'];
     return id?.toString();
@@ -621,7 +741,7 @@ class AuthService {
     }
 
     final result = await _remoteAuth.verifyCode(phone: phone, code: code);
-    
+
     if (result == null || !result.success || result.token == null) {
       return {'success': false, 'isCompany': false, 'needsFillData': false};
     }
@@ -668,7 +788,10 @@ class AuthService {
   }
 
   /// Смена пароля для авторизованного пользователя
-  static Future<bool> changePassword(String currentPassword, String newPassword) async {
+  static Future<bool> changePassword(
+    String currentPassword,
+    String newPassword,
+  ) async {
     if (ApiConfig.isConfigured) {
       return await _remoteAuth.changePassword(currentPassword, newPassword);
     }

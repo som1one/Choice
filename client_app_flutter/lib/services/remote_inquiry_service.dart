@@ -26,6 +26,7 @@ class RemoteInquiryService {
       '/api/client/sendOrderRequest',
       body,
       baseUrl: ApiConfig.clientBaseUrl,
+      throwOnError: true,
     );
     if (json == null) return null;
 
@@ -33,7 +34,12 @@ class RemoteInquiryService {
     final id = (json['id'] ?? json['data']?['id'])?.toString();
     if (id == null || id.isEmpty) return inquiry;
 
-    return inquiry.copyWith(id: id, createdAt: DateTime.now());
+    final creationDateRaw = json['creation_date'] ?? json['creationDate'];
+    final creationDate = creationDateRaw != null
+        ? DateTime.tryParse(creationDateRaw.toString())
+        : null;
+
+    return inquiry.copyWith(id: id, createdAt: creationDate ?? DateTime.now());
   }
 
   Future<bool?> updateInquiry(InquiryModel inquiry) async {
@@ -100,6 +106,10 @@ class RemoteInquiryService {
         final toKnowSpecialist =
             (item['to_know_specialist']?.toString() ?? 'false') == 'true';
         final toKnowEnroll = (item['to_know_enrollment_date']?.toString() ?? 'false') == 'true';
+        final createdAtRaw = item['creation_date'] ?? item['creationDate'];
+        final createdAt = createdAtRaw != null
+            ? DateTime.tryParse(createdAtRaw.toString())
+            : null;
 
         mapped.add(
           InquiryModel(
@@ -107,7 +117,7 @@ class RemoteInquiryService {
             question: desc,
             category: categoryIdToTitle(categoryId),
             clientName: '',
-            createdAt: DateTime.now(),
+            createdAt: createdAt ?? DateTime.now(),
             wantsPrice: toKnowPrice,
             wantsTime: toKnowDeadline,
             wantsSpecialist: toKnowSpecialist,

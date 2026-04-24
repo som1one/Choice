@@ -1,5 +1,7 @@
 """Модели базы данных для Client Service"""
-from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey
+from datetime import datetime
+
+from sqlalchemy import Column, Integer, String, Float, Boolean, ForeignKey, DateTime
 from sqlalchemy.orm import relationship
 from common.database import Base
 import uuid
@@ -42,7 +44,8 @@ class OrderRequest(Base):
     to_know_enrollment_date = Column(String, default="false")
     photo_uris = Column(String, nullable=True)  # JSON string
     status = Column(Integer, default=0)  # 0 - Active, 1 - Draft
-    
+    creation_date = Column(DateTime, default=datetime.utcnow, nullable=False)
+
     client = relationship("Client", back_populates="requests")
     
     def __repr__(self):

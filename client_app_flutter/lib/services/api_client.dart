@@ -420,6 +420,14 @@ class ApiClient {
   /// Обработка ошибки 401 - очистка токена и перенаправление на экран входа
   static Future<void> _handleUnauthorized() async {
     final navigator = navigatorKey?.currentState;
+    final userType = await AuthService.getUserType();
+    final token = await AuthTokenStore.getToken();
+
+    // Локальная админ-сессия может жить без серверного токена.
+    // В этом режиме не выкидываем пользователя на welcome-screen.
+    if (userType == UserType.admin && (token == null || token.isEmpty)) {
+      return;
+    }
 
     // Очищаем токен
     await AuthTokenStore.clearToken();

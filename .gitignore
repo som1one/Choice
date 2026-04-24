@@ -87,3 +87,5 @@ out/
 # Очень тяжёлая legacy-папка в корне репозитория (если нужна — убери эту строку)
 /services/
 
+# Local Xcode backup snapshots and indexes (can exceed GitHub file limits)
+/_xcode_backup/

@@ -3,6 +3,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart' show kIsWeb, debugPrint;
 import 'dart:io' show Platform;
+import 'screens/admin_panel_screen.dart';
 import 'screens/welcome_screen.dart';
 import 'navigation/client_tab_navigator.dart';
 import 'navigation/company_tab_navigator.dart';
@@ -39,24 +40,17 @@ Future<void> _initializeMobileServices() async {
     return;
   }
 
+  if (Platform.isIOS) {
+    debugPrint('Firebase/push initialization skipped on iOS');
+    return;
+  }
+
   try {
     if (Firebase.apps.isEmpty) {
       await Firebase.initializeApp();
     }
 
     FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-
-    // На iOS не блокируем старт приложения и не даем push-инициализации
-    // ломать базовый UI, если проект еще не полностью настроен под Firebase.
-    if (Platform.isIOS) {
-      try {
-        await PushNotificationService.initialize();
-      } catch (e) {
-        debugPrint('Push initialization skipped on iOS: $e');
-      }
-      return;
-    }
-
     await PushNotificationService.initialize();
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
@@ -89,10 +83,17 @@ class MyApp extends StatelessWidget {
             return const WelcomeScreen();
           }
           
-          final data = snapshot.data ?? {'authenticated': false, 'isCompany': false};
+          final data = snapshot.data ?? {
+            'authenticated': false,
+            'isCompany': false,
+            'isAdmin': false,
+          };
           
           // Если пользователь авторизован, показываем соответствующий экран с табами
           if (data['authenticated'] == true) {
+            if (data['isAdmin'] == true) {
+              return const AdminPanelScreen();
+            }
             if (data['isCompany'] == true) {
               return const CompanyTabNavigator();
             } else {
@@ -111,9 +112,11 @@ class MyApp extends StatelessWidget {
   Future<Map<String, dynamic>> _getInitialScreen() async {
     final authenticated = await AuthService.isAuthenticated();
     final isCompany = await AuthService.isCompany();
+    final isAdmin = await AuthService.isAdmin();
     return {
       'authenticated': authenticated,
       'isCompany': isCompany,
+      'isAdmin': isAdmin,
     };
   }
 }

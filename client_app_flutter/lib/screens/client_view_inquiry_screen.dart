@@ -7,6 +7,9 @@ import '../services/remote_client_service.dart';
 import '../services/user_profile_service.dart';
 import '../utils/auth_guard.dart';
 import 'company_detail_screen.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class ClientViewInquiryScreen extends StatefulWidget {
   const ClientViewInquiryScreen({super.key});
@@ -26,6 +29,13 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   String? _errorMessage;
   
   final OrderResponseService _responseService = OrderResponseService();
+
+  bool get _hasClientCoordinates {
+    if (_clientCoordinates == null || _clientCoordinates!.trim().isEmpty) {
+      return false;
+    }
+    return _parseCoordinates(_clientCoordinates!) != null;
+  }
 
   @override
   void initState() {
@@ -185,11 +195,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -321,6 +327,36 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
               ),
             ),
           ),
+          if (!_isLoadingResponses &&
+              _companyResponses.isNotEmpty &&
+              !_hasClientCoordinates)
+            Positioned(
+              top: 122,
+              left: 16,
+              right: 16,
+              child: Center(
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.95),
+                    borderRadius: BorderRadius.circular(18),
+                    border: Border.all(color: Colors.orange.withValues(alpha: 0.35)),
+                  ),
+                  child: const Text(
+                    'Точные координаты профиля не найдены, поэтому отклики показаны схематично.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ),
+              ),
+            ),
           // Кнопка внизу или сообщение об отсутствии компаний
           Positioned(
             bottom: 20,
@@ -444,10 +480,12 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
 
   List<Widget> _buildCompanyMarkers() {
     final markers = <Widget>[];
-    
+
     if (_companyResponses.isEmpty) return markers;
 
-    // Парсим координаты клиента
+    const markerWidth = 140.0;
+    const markerHeight = 132.0;
+
     double? clientLat;
     double? clientLng;
     if (_clientCoordinates != null && _clientCoordinates!.isNotEmpty) {
@@ -458,16 +496,10 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
       }
     }
 
-    // Если нет координат клиента, не устанавливаем центр карты
-    // Координаты должны быть загружены из профиля клиента
-    if (clientLat == null || clientLng == null) {
-      // Не используем хардкод координат - координаты должны быть в профиле
-      return markers; // Возвращаем только маркеры компаний без центра
-    }
-
     final screenSize = MediaQuery.of(context).size;
     final centerX = screenSize.width / 2;
-    final centerY = screenSize.height / 2;
+    final centerY = screenSize.height * 0.46;
+    final fallbackRadius = math.min(screenSize.width, screenSize.height) * 0.24;
 
     for (int i = 0; i < _companyResponses.length; i++) {
       final response = _companyResponses[i];
@@ -480,8 +512,11 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
       // Получаем координаты компании
       final companyCoordsStr = response.company['coords'] ?? response.company['coordinates'];
       Offset? markerPosition;
-      
-      if (companyCoordsStr != null && companyCoordsStr.toString().isNotEmpty) {
+
+      if (clientLat != null &&
+          clientLng != null &&
+          companyCoordsStr != null &&
+          companyCoordsStr.toString().isNotEmpty) {
         final companyCoords = _parseCoordinates(companyCoordsStr.toString());
         if (companyCoords != null) {
           final companyLat = companyCoords['lat']!;
@@ -496,17 +531,24 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
             centerX,
             centerY,
             screenSize,
+            markerWidth,
+            markerHeight,
           );
         }
       }
 
-      // Если не удалось вычислить позицию, используем равномерное распределение
+      // Если точных координат нет, не прячем отклики — показываем их равномерно.
       if (markerPosition == null) {
-        final angle = (2 * math.pi * i) / _companyResponses.length;
-        final radius = math.min(screenSize.width, screenSize.height) * 0.25;
-        markerPosition = Offset(
-          centerX + radius * math.cos(angle) - 60,
-          centerY + radius * math.sin(angle) - 80,
+        final angle = (2 * math.pi * i) / math.max(_companyResponses.length, 1);
+        final x =
+            centerX + fallbackRadius * math.cos(angle) - (markerWidth / 2);
+        final y =
+            centerY + fallbackRadius * math.sin(angle) - (markerHeight / 2);
+        markerPosition = _clampMarkerPosition(
+          Offset(x, y),
+          screenSize,
+          markerWidth,
+          markerHeight,
         );
       }
 
@@ -557,45 +599,48 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
     double centerX,
     double centerY,
     Size screenSize,
+    double markerWidth,
+    double markerHeight,
   ) {
-    // Вычисляем расстояние и направление
-    final dLat = companyLat - clientLat;
-    final dLng = companyLng - clientLng;
-    
-    // Вычисляем реальное расстояние по формуле гаверсинуса (более точная)
-    final R = 6371000.0; // Радиус Земли в метрах
-    final lat1Rad = clientLat * math.pi / 180;
-    final lat2Rad = companyLat * math.pi / 180;
-    final dLatRad = dLat * math.pi / 180;
-    final dLngRad = dLng * math.pi / 180;
-    
-    final a = math.sin(dLatRad / 2) * math.sin(dLatRad / 2) +
-        math.cos(lat1Rad) * math.cos(lat2Rad) *
-        math.sin(dLngRad / 2) * math.sin(dLngRad / 2);
-    final c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
-    final distance = R * c; // расстояние в метрах
-    
-    // Масштабируем для отображения на экране
-    // Используем радиус поиска для масштабирования
-    final maxDistance = _searchRadiusKm * 1000; // в метрах
-    
-    // Если компания вне радиуса, показываем на границе круга
-    final scale = distance > maxDistance 
-        ? 1.0 
-        : math.min(1.0, distance / maxDistance);
-    final radius = math.min(screenSize.width, screenSize.height) * 0.3 * scale;
-    
-    // Вычисляем угол (азимут)
-    final angle = math.atan2(dLngRad, dLatRad);
-    
-    // Вычисляем позицию относительно центра
-    final x = centerX + radius * math.cos(angle) - 60;
-    final y = centerY + radius * math.sin(angle) - 80;
-    
-    // Ограничиваем позицию границами экрана
+    final avgLatRad = ((clientLat + companyLat) / 2) * math.pi / 180;
+    final dxMeters =
+        (companyLng - clientLng) * 111320 * math.cos(avgLatRad);
+    final dyMeters = (companyLat - clientLat) * 111320;
+
+    final maxDistanceMeters = math.max(_searchRadiusKm * 1000, 1);
+    double normalizedX = dxMeters / maxDistanceMeters;
+    double normalizedY = dyMeters / maxDistanceMeters;
+
+    final distanceRatio =
+        math.sqrt((normalizedX * normalizedX) + (normalizedY * normalizedY));
+    if (distanceRatio > 1) {
+      normalizedX /= distanceRatio;
+      normalizedY /= distanceRatio;
+    }
+
+    final visualRadius = math.min(screenSize.width, screenSize.height) * 0.28;
+    final rawPosition = Offset(
+      centerX + (normalizedX * visualRadius) - (markerWidth / 2),
+      centerY - (normalizedY * visualRadius) - (markerHeight / 2),
+    );
+
+    return _clampMarkerPosition(
+      rawPosition,
+      screenSize,
+      markerWidth,
+      markerHeight,
+    );
+  }
+
+  Offset _clampMarkerPosition(
+    Offset rawPosition,
+    Size screenSize,
+    double markerWidth,
+    double markerHeight,
+  ) {
     return Offset(
-      x.clamp(0.0, screenSize.width - 120),
-      y.clamp(0.0, screenSize.height - 160),
+      rawPosition.dx.clamp(8.0, screenSize.width - markerWidth - 8.0),
+      rawPosition.dy.clamp(150.0, screenSize.height - markerHeight - 120.0),
     );
   }
 
@@ -1035,10 +1080,7 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(
-      size: const Size(24, 24),
-      painter: _PersonIconPainter(),
-    );
+    return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
 }
 

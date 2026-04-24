@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'dart:io';
 import '../models/order_request_model.dart';
 import '../services/remote_inquiry_service.dart';
+import '../services/remote_file_service.dart';
 import '../constants/categories.dart';
 import 'order_screen.dart';
 
@@ -16,6 +17,8 @@ class OrderRequestScreen extends StatefulWidget {
 }
 
 class _OrderRequestScreenState extends State<OrderRequestScreen> {
+  final ImagePicker _imagePicker = ImagePicker();
+  final RemoteFileService _fileService = RemoteFileService();
   late OrderRequestModel _orderRequest;
   late String _selectedCategory;
   late TextEditingController _descriptionController;
@@ -28,6 +31,13 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   bool _isLoading = false;
   bool _showCategoryModal = false;
 
+  double _normalizeRadiusKm(int rawRadius) {
+    final normalizedKm = rawRadius <= 100
+        ? rawRadius.toDouble()
+        : rawRadius / 1000.0;
+    return normalizedKm.clamp(5.0, 25.0);
+  }
+
   @override
   void initState() {
     super.initState();
@@ -38,7 +48,7 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     _toKnowDeadline = _orderRequest.toKnowDeadline;
     _toKnowSpecialist = _orderRequest.toKnowSpecialist;
     _toKnowEnrollmentDate = _orderRequest.toKnowEnrollmentDate;
-    _radiusKm = _orderRequest.searchRadius / 1000.0;
+    _radiusKm = _normalizeRadiusKm(_orderRequest.searchRadius);
     _photoUris = List<String>.from(_orderRequest.photoUris);
     // Обеспечиваем 3 элемента
     while (_photoUris.length < 3) {
@@ -98,14 +108,11 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
   Future<void> _pickImage(int index) async {
     if (!_canEdit) return;
 
-    final result = await FilePicker.platform.pickFiles(
-      type: FileType.image,
-      allowMultiple: false,
-    );
+    final image = await _imagePicker.pickImage(source: ImageSource.gallery);
 
-    if (result != null && result.files.single.path != null) {
+    if (image != null) {
       setState(() {
-        _photoUris[index] = result.files.single.path!;
+        _photoUris[index] = image.path;
       });
     }
   }
@@ -125,16 +132,27 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
     });
 
     try {
-      // TODO: Загрузить изображения на сервер через File Service
-      // Пока оставляем локальные пути (в реальности нужно загрузить и получить URL)
-      final photoUrisToSend = _photoUris.where((uri) => uri.isNotEmpty && !uri.startsWith('http')).toList();
+      final photoUrisToSend = <String>[];
+      for (final uri in _photoUris.where((item) => item.trim().isNotEmpty)) {
+        final normalized = uri.trim();
+        if (_isLocalPhotoUri(normalized)) {
+          final uploadedFileName = await _fileService.uploadFile(normalized);
+          if (uploadedFileName == null || uploadedFileName.isEmpty) {
+            throw Exception('Не удалось загрузить одно из изображений');
+          }
+          photoUrisToSend.add(uploadedFileName);
+          continue;
+        }
+
+        photoUrisToSend.add(_normalizeRemotePhotoUri(normalized));
+      }
 
       final remoteService = RemoteInquiryService();
       final result = await remoteService.updateOrderRequest(
         id: _orderRequest.id,
         categoryId: categoryTitleToId(_selectedCategory),
         description: _descriptionController.text.trim(),
-        searchRadius: (_radiusKm * 1000).toInt(),
+        searchRadius: _radiusKm.round(),
         toKnowPrice: _toKnowPrice,
         toKnowDeadline: _toKnowDeadline,
         toKnowSpecialist: _toKnowSpecialist,
@@ -168,6 +186,23 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
         });
       }
     }
+  }
+
+  bool _isLocalPhotoUri(String uri) {
+    final normalized = uri.toLowerCase();
+    return normalized.startsWith('/') ||
+        normalized.startsWith('file://') ||
+        normalized.startsWith('content://') ||
+        RegExp(r'^[a-z]:[\\/]').hasMatch(normalized);
+  }
+
+  String _normalizeRemotePhotoUri(String uri) {
+    const marker = '/api/objects/';
+    final markerIndex = uri.indexOf(marker);
+    if (markerIndex >= 0) {
+      return uri.substring(markerIndex + marker.length);
+    }
+    return uri;
   }
 
   @override

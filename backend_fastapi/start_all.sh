@@ -41,10 +41,12 @@ start_service() {
     local name=$1
     local port=$2
     local module=$3
+    local log_name
+    log_name=$(printf '%s' "$name" | tr '[:upper:]' '[:lower:]')
     
     echo "Starting $name on port $port..."
     # Важно: запускаем из корня backend_fastapi, чтобы работали импорты пакета `services.*`
-    PYTHONPATH="$(pwd)" "$PYTHON_BIN" -m uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${name,,}.log" 2>&1 &
+    PYTHONPATH="$(pwd)" "$PYTHON_BIN" -m uvicorn "${module}:app" --host 0.0.0.0 --port "$port" --reload > "logs/${log_name}.log" 2>&1 &
     sleep 1
 }
 

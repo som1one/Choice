@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../services/remote_client_service.dart';
+import '../services/remote_chat_service.dart';
 import '../services/remote_review_service.dart';
 import '../services/remote_ordering_service.dart';
 import '../services/api_config.dart';
 import '../utils/auth_guard.dart';
+import '../utils/order_state.dart';
 import 'chat_screen.dart';
+import '../services/auth_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanyClientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -25,9 +30,12 @@ class CompanyClientDetailScreen extends StatefulWidget {
 class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
   final TextEditingController _responseController = TextEditingController();
   final RemoteOrderingService _orderingService = RemoteOrderingService();
+  final RemoteChatService _chatService = RemoteChatService();
   bool _isFinishingOrder = false;
+  bool _isSendingResponse = false;
   bool _isSubmittingReview = false;
   bool _canLeaveReview = false;
+  bool _hasOwnReview = false;
   Map<String, dynamic>? _clientData;
   List<Map<String, dynamic>> _clientReviews = [];
   double _clientRating = 0.0;
@@ -125,6 +133,8 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       // Вычисляем средний рейтинг
       double totalRating = 0.0;
       int count = 0;
+      final currentUserId = await AuthService.getCurrentUserId();
+      bool hasOwnReview = false;
       for (final review in clientReviews) {
         final gradeRaw = review['grade'];
         final grade = gradeRaw is num
@@ -134,12 +144,22 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
           totalRating += grade;
           count++;
         }
+
+        final senderId = (review['sender_id'] ?? review['senderId'])
+            ?.toString()
+            .trim();
+        if (currentUserId != null &&
+            currentUserId.isNotEmpty &&
+            senderId == currentUserId) {
+          hasOwnReview = true;
+        }
       }
       final avgRating = count > 0 ? totalRating / count : 0.0;
 
       setState(() {
         _clientReviews = clientReviews;
         _clientRating = avgRating;
+        _hasOwnReview = hasOwnReview;
       });
     } catch (e) {
       // Игнорируем ошибки загрузки отзывов
@@ -155,7 +175,7 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       final canLeave = await reviewService.canSendReview(clientId.toString());
       if (!mounted) return;
       setState(() {
-        _canLeaveReview = canLeave;
+        _canLeaveReview = canLeave && !_hasOwnReview;
       });
     } catch (_) {
       if (!mounted) return;
@@ -183,6 +203,10 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
 
       if (!mounted) return;
       if (result != null && result['error'] == null) {
+        setState(() {
+          _hasOwnReview = true;
+          _canLeaveReview = false;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Отзыв о клиенте успешно отправлен')),
         );
@@ -311,8 +335,78 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
     }
   }
 
+  Future<void> _sendResponseToClient() async {
+    final clientId = _resolveClientId();
+    final message = _responseController.text.trim();
+
+    if (clientId == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Не удалось определить клиента')),
+      );
+      return;
+    }
+
+    if (message.isEmpty || _isSendingResponse) {
+      if (!mounted || _isSendingResponse) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Введите сообщение для клиента')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isSendingResponse = true;
+    });
+
+    try {
+      await _chatService.sendMessage(text: message, receiverId: clientId);
+      if (!mounted) return;
+      _responseController.clear();
+      FocusScope.of(context).unfocus();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Сообщение отправлено клиенту')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Не удалось отправить сообщение: $e')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSendingResponse = false;
+        });
+      }
+    }
+  }
+
   Future<void> _finishOrder() async {
     if (_isFinishingOrder) return;
+    if (isOrderFinished(widget.order)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Заказ уже завершен')));
+      return;
+    }
+    if (isOrderCanceled(widget.order)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Отмененный заказ нельзя завершить')),
+      );
+      return;
+    }
+    if (!canFinishOrder(widget.order)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Сначала дождитесь подтверждения записи клиентом'),
+        ),
+      );
+      return;
+    }
+
     final orderIdRaw = widget.order['id'] ?? widget.order['orderId'];
     final orderId = orderIdRaw is num
         ? orderIdRaw.toInt()
@@ -355,10 +449,18 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       final result = await _orderingService.finish(orderId);
       if (!mounted) return;
       if (result != null) {
-        widget.order['status'] = result['status'] ?? 2;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Заказ завершен')),
-        );
+        widget.order['status'] = parseOrderStatus(result);
+        widget.order['is_date_confirmed'] =
+            result['is_date_confirmed'] ??
+            result['isDateConfirmed'] ??
+            widget.order['is_date_confirmed'];
+        widget.order['is_enrolled'] =
+            result['is_enrolled'] ??
+            result['isEnrolled'] ??
+            widget.order['is_enrolled'];
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Заказ завершен')));
         await _checkCanLeaveReview();
         setState(() {});
       } else {
@@ -384,10 +486,9 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
   Widget build(BuildContext context) {
     final order = widget.order;
     final enrollmentDate = order['enrollment_date'];
-    final isDateConfirmed = order['is_date_confirmed'] ?? false;
-    final isEnrolled = order['is_enrolled'] ?? false;
-    final status = order['status'] ?? 1;
-    final isFinished = status == 2;
+    final isConfirmed = isOrderConfirmed(order);
+    final isFinished = isOrderFinished(order);
+    final isCanceled = isOrderCanceled(order);
     final prepayment = order['prepayment'] ?? 0;
     final hasPrepayment = prepayment > 0;
 
@@ -430,11 +531,7 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Row(
               mainAxisSize: MainAxisSize.min,
@@ -624,11 +721,49 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
                   const SizedBox(height: 8),
                   TextField(
                     controller: _responseController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Напишите ответ клиенту',
-                      border: OutlineInputBorder(),
+                      border: const OutlineInputBorder(),
+                      suffixIcon: IconButton(
+                        onPressed: _isSendingResponse
+                            ? null
+                            : _sendResponseToClient,
+                        icon: _isSendingResponse
+                            ? const SizedBox(
+                                width: 18,
+                                height: 18,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.send),
+                        tooltip: 'Отправить сообщение',
+                      ),
                     ),
                     maxLines: 3,
+                    textInputAction: TextInputAction.send,
+                    onSubmitted: (_) => _sendResponseToClient(),
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _isSendingResponse
+                          ? null
+                          : _sendResponseToClient,
+                      icon: _isSendingResponse
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.send),
+                      label: Text(
+                        _isSendingResponse
+                            ? 'Отправка...'
+                            : 'Отправить сообщение',
+                      ),
+                    ),
                   ),
                 ],
               ),
@@ -647,7 +782,29 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
                     style: TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
                   ),
                   const SizedBox(height: 8),
-                  if (isDateConfirmed || isEnrolled) ...[
+                  if (isCanceled) ...[
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.withValues(alpha: 0.1),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.red),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(Icons.cancel_outlined, color: Colors.red),
+                          SizedBox(width: 8),
+                          Text(
+                            'Заказ отменен',
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ] else if (isConfirmed || isFinished) ...[
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
@@ -808,10 +965,13 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
+    return const ProfileCornerIcon(userType: UserType.company, size: 28);
   }
 
-  String _formatReviewerLabel({required String prefix, required Object? rawId}) {
+  String _formatReviewerLabel({
+    required String prefix,
+    required Object? rawId,
+  }) {
     final normalized = rawId?.toString().trim() ?? '';
     if (normalized.isEmpty) return prefix;
     if (normalized.length <= 8) return '$prefix $normalized';

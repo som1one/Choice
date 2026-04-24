@@ -9,6 +9,10 @@ const List<String> kSystemCategories = <String>[
   'Автотовары',
 ];
 
+void updateCategoryCatalog(Iterable<String> titles) {
+  // Каталог фиксирован: сохраняем исходный список категорий в клиентском UI.
+}
+
 int categoryTitleToId(String title) {
   final idx = kSystemCategories.indexOf(title);
   return idx >= 0 ? idx + 1 : 1;
@@ -19,4 +23,3 @@ String categoryIdToTitle(int id) {
   if (idx < 0 || idx >= kSystemCategories.length) return 'Категория #$id';
   return kSystemCategories[idx];
 }
-

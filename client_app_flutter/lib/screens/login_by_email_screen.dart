@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import '../services/remote_company_service.dart';
+import '../utils/auth_input_validator.dart';
+import 'admin_panel_screen.dart';
 import 'reset_password_screen.dart';
 
 class LoginByEmailScreen extends StatefulWidget {
@@ -32,6 +34,14 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
         _passwordController.text.isNotEmpty;
   }
 
+  String? get _loginValidationError {
+    final value = _emailController.text.trim();
+    if (value.isEmpty) return null;
+    if (AuthInputValidator.isValidEmail(value)) return null;
+    if (!value.contains('@')) return null;
+    return 'Введите корректный логин или email';
+  }
+
   Future<bool> _checkCompanyNeedsFillData() async {
     try {
       final profile = await _remoteCompanyService.getCompanyProfile();
@@ -46,7 +56,9 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
       if (isDataFilled) return false;
 
       final hasCategories = categories is List && categories.isNotEmpty;
-      final hasPhotos = photos is List && photos.any((e) => e != null && e.toString().trim().isNotEmpty);
+      final hasPhotos =
+          photos is List &&
+          photos.any((e) => e != null && e.toString().trim().isNotEmpty);
       final hasBaseInfo = siteUrl.isNotEmpty || description.isNotEmpty;
 
       return !(hasCategories || hasPhotos || hasBaseInfo);
@@ -87,9 +99,12 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
           }
           return;
         } else if (userType == UserType.admin) {
-          // Админ - обрабатываем как компанию для совместимости
-          if (widget.onLoginSuccess != null) {
-            widget.onLoginSuccess!(true, false);
+          if (mounted) {
+            Navigator.pushAndRemoveUntil(
+              context,
+              MaterialPageRoute(builder: (_) => const AdminPanelScreen()),
+              (route) => false,
+            );
           }
           return;
         }
@@ -104,7 +119,8 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _errorMessage = 'Ошибка сети. Проверьте подключение и попробуйте снова.';
+          _errorMessage =
+              'Ошибка сети. Проверьте подключение и попробуйте снова.';
         });
       }
     } finally {
@@ -136,9 +152,12 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
             const SizedBox(height: 5),
             TextField(
               controller: _emailController,
-              keyboardType: TextInputType.emailAddress,
+              keyboardType: TextInputType.text,
+              autocorrect: false,
+              enableSuggestions: false,
               decoration: InputDecoration(
                 hintText: 'Логин',
+                errorText: _loginValidationError,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -224,7 +243,9 @@ class _LoginByEmailScreenState extends State<LoginByEmailScreen> {
                         width: 20,
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
                         ),
                       )
                     : const Text(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../screens/company_inquiries_screen.dart';
 import '../screens/chats_screen.dart';
+import '../screens/company_orders_screen.dart';
 import '../screens/company_settings_screen.dart';
 
 class CompanyTabNavigator extends StatefulWidget {
@@ -33,6 +34,7 @@ class _CompanyTabNavigatorState extends State<CompanyTabNavigator> {
         index: _currentIndex,
         children: [
           const CompanyInquiriesScreen(),
+          const CompanyOrdersScreen(),
           ChatsScreen(onUnreadCountChanged: _updateUnreadCount),
           const CompanySettingsScreen(),
         ],
@@ -47,6 +49,10 @@ class _CompanyTabNavigatorState extends State<CompanyTabNavigator> {
           const BottomNavigationBarItem(
             icon: Icon(Icons.category),
             label: 'Заявки',
+          ),
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.shopping_bag),
+            label: 'Заказы',
           ),
           BottomNavigationBarItem(
             icon: Stack(

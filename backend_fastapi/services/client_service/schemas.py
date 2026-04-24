@@ -1,4 +1,6 @@
 """Pydantic схемы для Client Service"""
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr
 from typing import List, Optional
 
@@ -43,7 +45,8 @@ class OrderRequestResponse(BaseModel):
     to_know_enrollment_date: str
     photo_uris: Optional[str]
     status: int
-    
+    creation_date: Optional[datetime] = None
+
     class Config:
         from_attributes = True
 

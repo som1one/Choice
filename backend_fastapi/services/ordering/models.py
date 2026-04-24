@@ -30,7 +30,8 @@ class Order(Base):
     specialist_phone = Column(String, nullable=True)
     enrollment_date = Column(DateTime, nullable=True)
     is_enrolled = Column(Boolean, default=False)
-    is_date_confirmed = Column(Boolean, default=True)
+    # Дата подтверждается только после явного действия второй стороны.
+    is_date_confirmed = Column(Boolean, default=False)
     # Используем ARRAY для PostgreSQL и JSON для SQLite
     reviews = (Column(PG_ARRAY(String), default=[]) if _is_postgresql 
                else Column(JSON, default=lambda: []))

@@ -1,8 +1,13 @@
 """Сервис верификации телефона через Vonage"""
-from vonage import Sms, Client
 from pydantic_settings import BaseSettings
 import random
 from typing import Dict
+
+try:
+    from vonage import Sms, Client  # type: ignore
+except Exception:
+    Sms = None
+    Client = None
 
 class VonageSettings(BaseSettings):
     vonage_api_key: str | None = None
@@ -15,7 +20,7 @@ class VonageSettings(BaseSettings):
 
 settings = VonageSettings()
 # Создаем клиент только если ключи заданы
-if settings.vonage_api_key and settings.vonage_api_secret:
+if Client and Sms and settings.vonage_api_key and settings.vonage_api_secret:
     client = Client(key=settings.vonage_api_key, secret=settings.vonage_api_secret)
     sms = Sms(client)
 else:

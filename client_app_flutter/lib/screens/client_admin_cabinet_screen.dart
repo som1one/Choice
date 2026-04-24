@@ -12,6 +12,10 @@ import 'chats_screen.dart';
 import '../services/remote_client_service.dart';
 import '../services/api_config.dart';
 import '../services/remote_file_service.dart';
+import '../navigation/client_tab_navigator.dart';
+import 'admin_panel_screen.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class ClientAdminCabinetScreen extends StatefulWidget {
   const ClientAdminCabinetScreen({super.key});
@@ -78,6 +82,22 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
     }
 
     _loadSettings();
+  }
+
+  Future<void> _openHomeScreen() async {
+    final userType = await AuthService.getUserType();
+    if (!mounted) return;
+
+    final Widget homeScreen =
+        userType == UserType.admin
+            ? const AdminPanelScreen()
+            : const ClientTabNavigator();
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => homeScreen),
+      (route) => false,
+    );
   }
 
   @override
@@ -335,32 +355,6 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
     final image = await _picker.pickImage(source: ImageSource.gallery);
     if (image == null) return;
 
-    // Загружаем изображение на сервер
-    if (ApiConfig.isConfigured) {
-      try {
-        final fileService = RemoteFileService();
-        final filename = await fileService.uploadFile(image.path);
-
-        if (filename != null) {
-          // Обновляем иконку через API
-          final clientService = RemoteClientService();
-          await clientService.changeIconUri(filename);
-        } else if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Не удалось загрузить аватар на сервер'),
-            ),
-          );
-        }
-      } catch (_) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Ошибка загрузки аватара на сервер')),
-          );
-        }
-      }
-    }
-
     setState(() {
       _avatarPath = image.path;
     });
@@ -377,6 +371,41 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
     ScaffoldMessenger.of(
       context,
     ).showSnackBar(const SnackBar(content: Text('Аватар обновлен')));
+
+    // Пытаемся синхронизировать с сервером уже после локального обновления.
+    if (ApiConfig.isConfigured) {
+      try {
+        final fileService = RemoteFileService();
+        final filename = await fileService.uploadFile(image.path);
+
+        if (filename != null) {
+          final clientService = RemoteClientService();
+          await clientService.changeIconUri(filename);
+          final remotePath = '${ApiConfig.fileBaseUrl}/api/objects/$filename';
+          if (!mounted) return;
+          setState(() {
+            _avatarPath = remotePath;
+          });
+
+          data['avatarPath'] = remotePath;
+          await prefs.setString('client_settings', jsonEncode(data));
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Аватар сохранен локально, но сервер не принял файл'),
+            ),
+          );
+        }
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Аватар сохранен локально, загрузка на сервер не удалась'),
+            ),
+          );
+        }
+      }
+    }
   }
 
   void _showInstructions() {
@@ -415,41 +444,7 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: Colors.lightBlue[200],
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: const Center(
-                      child: Text(
-                        'V',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                  Positioned(
-                    top: 4,
-                    right: 4,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              child: const ChoiceLogoIcon(size: 32),
             ),
             title: const Text(
               'НАСТРОЙКИ КЛИЕНТА',
@@ -461,6 +456,11 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
             ),
             centerTitle: true,
             actions: [
+              IconButton(
+                icon: const Icon(Icons.home_outlined, color: Colors.black),
+                tooltip: 'На главный экран',
+                onPressed: _openHomeScreen,
+              ),
               Padding(
                 padding: const EdgeInsets.only(right: 16.0),
                 child: IconButton(
@@ -752,7 +752,11 @@ class _ClientAdminCabinetScreenState extends State<ClientAdminCabinetScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
+    return ProfileCornerIcon(
+      userType: UserType.client,
+      imagePath: _avatarPath,
+      size: 28,
+    );
   }
 
   Widget _buildLogoutButton() {

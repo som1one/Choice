@@ -8,6 +8,8 @@ import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
 import '../services/remote_company_service.dart';
 import '../services/remote_ordering_service.dart';
+import '../widgets/choice_logo_icon.dart';
+import '../widgets/profile_corner_icon.dart';
 
 class CompanyResponseScreen extends StatefulWidget {
   const CompanyResponseScreen({super.key});
@@ -272,11 +274,7 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
             elevation: 0,
             leading: Padding(
               padding: const EdgeInsets.only(left: 16.0),
-              child: Icon(
-                Icons.favorite,
-                color: Colors.lightBlue[300],
-                size: 28,
-              ),
+              child: const ChoiceLogoIcon(size: 30),
             ),
             title: Text(
               _city ?? 'Загрузка...',
@@ -500,7 +498,7 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
   }
 
   Widget _buildPersonIcon() {
-    return CustomPaint(size: const Size(24, 24), painter: _PersonIconPainter());
+    return const ProfileCornerIcon(userType: UserType.company, size: 28);
   }
 
   String? _formatOrderDate(dynamic rawDate, String? fallback) {

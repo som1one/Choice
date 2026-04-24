@@ -1,10 +1,12 @@
 """Pydantic схемы для Authentication Service"""
-from pydantic import BaseModel, EmailStr, Field, field_validator, BeforeValidator
+from pydantic import BaseModel, EmailStr, Field, field_validator, BeforeValidator, TypeAdapter
 from typing import Optional, Annotated, Any
 from datetime import datetime
 from .models import UserType
 import uuid
 import re
+
+email_adapter = TypeAdapter(EmailStr)
 
 class UserBase(BaseModel):
     email: EmailStr
@@ -32,9 +34,21 @@ class UserResponse(UserBase):
         from_attributes = True
 
 class LoginRequest(BaseModel):
-    email: EmailStr
+    email: str
     password: str
     device_token: Optional[str] = None
+
+    @field_validator('email')
+    @classmethod
+    def validate_login_email(cls, v: str) -> str:
+        email = v.strip().lower()
+        try:
+            email_adapter.validate_python(email)
+            return email
+        except Exception:
+            if re.fullmatch(r'[^@\s]+@[^@\s]+\.local', email):
+                return email
+            raise ValueError('Invalid email address')
 
 def normalize_phone(v: Any) -> str:
     """Нормализация номера телефона - убираем все нецифровые символы"""

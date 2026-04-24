@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'login_screen.dart';
+import '../widgets/choice_logo_icon.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -33,80 +34,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               // Логотип
-              SizedBox(
-                height: 120,
-                child: Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    // Синие формы (V/галочка) - более вытянутые и закругленные
-                    Positioned(
-                      bottom: 20,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Transform.rotate(
-                            angle: -0.4,
-                            child: Container(
-                              width: 70,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF81D4FA),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          const SizedBox(width: 4),
-                          Transform.rotate(
-                            angle: 0.4,
-                            child: Container(
-                              width: 70,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF81D4FA),
-                                borderRadius: BorderRadius.circular(12),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.15),
-                                    blurRadius: 6,
-                                    offset: const Offset(0, 3),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Серый круг сверху справа
-                    Positioned(
-                      top: 0,
-                      right: MediaQuery.of(context).size.width / 2 - 15,
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF616161),
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.black.withValues(alpha: 0.15),
-                              blurRadius: 6,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              const ChoiceLogoIcon(size: 136),
               const SizedBox(height: 40),
               // Текст "ВЫБОР"
               const Text(
@@ -145,20 +73,6 @@ class _WelcomeScreenState extends State<WelcomeScreen> {
               ),
             ],
           ),
-        ),
-      ),
-      // FAB кнопка с карандашом (если нужна)
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(builder: (context) => const LoginScreen()),
-          );
-        },
-        backgroundColor: const Color(0xFFBA68C8),
-        child: const Icon(
-          Icons.edit,
-          color: Colors.white,
         ),
       ),
     );

@@ -13,6 +13,7 @@ from ..repositories import CompanyRepository
 from common.address_service import geocode, get_distance
 from services.client_service.models import OrderRequest, Client
 from services.client_service.schemas import OrderRequestResponse
+from services.client_service.repositories import OrderRequestRepository
 from math import radians, cos, sin, asin, sqrt
 import uuid
 
@@ -40,6 +41,40 @@ def _parse_coordinates(raw: str | None) -> tuple[float, float] | None:
         return lat, lng
     except (ValueError, AttributeError):
         return None
+
+
+def _normalize_category_ids(raw_categories) -> list[int]:
+    if raw_categories is None:
+        return []
+    if isinstance(raw_categories, list):
+        normalized = []
+        for item in raw_categories:
+            try:
+                normalized.append(int(item))
+            except (TypeError, ValueError):
+                continue
+        return normalized
+    if isinstance(raw_categories, str):
+        text = raw_categories.strip()
+        if not text:
+            return []
+        try:
+            import json
+
+            decoded = json.loads(text)
+            if isinstance(decoded, list):
+                return _normalize_category_ids(decoded)
+        except Exception:
+            pass
+
+        parts = [part.strip() for part in text.strip("[]").split(",")]
+        return [int(part) for part in parts if part.isdigit()]
+    return []
+
+
+async def _expire_stale_requests(db: Session) -> None:
+    repo = OrderRequestRepository(db)
+    await repo.expire_stale_active_requests()
 
 @router.get("/getAll", response_model=list[CompanyDetailsResponse])
 async def get_all_companies(
@@ -298,6 +333,7 @@ async def change_data(
     company.coordinates = coords
     company.description = request.description
     company.card_color = request.card_color
+    company.is_data_filled = True
     
     result = await repository.update(company)
     
@@ -382,6 +418,7 @@ async def change_data_admin(
     company.coordinates = coords
     company.description = request.description
     company.card_color = request.card_color
+    company.is_data_filled = True
     
     result = await repository.update(company)
     
@@ -672,6 +709,8 @@ async def get_order_requests(
     - ?categoriesId[0]=1&categoriesId[1]=2 (альтернативный формат)
     """
     # Проверка, что пользователь - компания
+    await _expire_stale_requests(db)
+
     if current_user.get("user_type") != "Company":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -700,7 +739,7 @@ async def get_order_requests(
             categories_id = categories_from_query
     
     # Получаем категории компании
-    company_categories = company.categories_id or []
+    company_categories = _normalize_category_ids(company.categories_id)
     
     # Если переданы категории в параметрах, используем их (для фильтрации)
     if categories_id:
