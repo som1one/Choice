@@ -146,7 +146,6 @@ if [ "$ALL_PASSED" = true ]; then
     echo "Access local services:"
     echo "  • API Docs: http://localhost:8001/docs"
     echo "  • Client service: http://localhost:8002/docs"
-    echo "  • Optional static web host: docker compose --profile web up -d nginx"
 else
     log_error "Some services failed to start. Check logs:"
     echo "  docker compose logs -f"

@@ -223,39 +223,6 @@ services:
     networks:
       - choice_network
 
-  # Optional static frontend host. Backend traffic still uses direct ports.
-  nginx:
-    image: nginx:alpine
-    container_name: choice_nginx
-    restart: always
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./client_app_flutter/build/web:/usr/share/nginx/html:ro
-    networks:
-      - choice_network
-    profiles:
-      - web
-
-  # Optional Flutter web build that writes to client_app_flutter/build/web.
-  flutter_build:
-    image: ghcr.io/cirruslabs/flutter:3.41.9
-    container_name: choice_flutter_build
-    volumes:
-      - ./client_app_flutter:/app
-    working_dir: /app
-    command: >
-      sh -c "flutter build web 
-      --dart-define=USE_REMOTE_API=true 
-      --dart-define=API_HOST=${API_HOST:-localhost} 
-      --dart-define=API_SCHEME=${API_SCHEME:-http} 
-      --release"
-    profiles:
-      - build
-
 volumes:
   postgres_data:
   rabbitmq_data:

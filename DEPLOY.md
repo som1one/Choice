@@ -1,6 +1,6 @@
 # Развёртывание Choice App на Ubuntu Server
 
-Полное руководство по развёртыванию микросервисного приложения на чистом Ubuntu сервере через GitHub.
+Полное руководство по развёртыванию backend-части на чистом Ubuntu сервере через GitHub.
 
 ## 📋 Содержание
 
@@ -17,8 +17,9 @@
 
 ## Архитектура
 
-```
-Flutter Web и мобильный клиент ходят прямо в backend-сервисы по портам:
+Backend-only сервер поднимает PostgreSQL и FastAPI-сервисы. Flutter на сервере не нужен.
+
+Клиенты ходят прямо в backend-сервисы по портам:
 
 - `8001` - auth
 - `8002` - client
@@ -28,9 +29,6 @@ Flutter Web и мобильный клиент ходят прямо в backend-
 - `8006` - chat / websocket
 - `8007` - review
 - `8008` - file
-
-`nginx` в текущем docker-стеке опционален и нужен только для раздачи собранного Flutter Web как статики. Он не является обязательным API gateway.
-```
 
 ---
 
@@ -49,10 +47,9 @@ Flutter Web и мобильный клиент ходят прямо в backend-
 - **OS:** Ubuntu 22.04/24.04 LTS
 
 ### Необходимые порты
-- `80` - HTTP
-- `443` - HTTPS
 - `22` - SSH
 - `8001-8008` - API и WebSocket сервисы
+- `5432` - PostgreSQL, если нужен внешний доступ к БД
 
 ---
 
@@ -150,7 +147,7 @@ nano .env
 JWT_SECRET_KEY=your-super-secret-random-key-here  # Генерируйте: openssl rand -hex 32
 DB_PASSWORD=your-strong-database-password
 
-# Доступ
+# Хост для подсказок в deploy.sh
 API_HOST=your-server-ip-or-domain.com
 ```
 
@@ -170,9 +167,8 @@ RABBITMQ_ENABLED=false
 # File storage
 FILE_UPLOAD_PATH=/app/uploads
 
-# Flutter API config
+# Host label for deploy output
 API_HOST=your-domain.com
-API_SCHEME=http
 ```
 
 ---
@@ -186,10 +182,9 @@ cd /opt/choice-app
 
 Скрипт автоматически:
 1. Подтянет свежий код
-2. Соберёт Flutter Web
-3. Соберёт Docker-образы backend
-4. Поднимет backend на портах `8001..8008`
-5. Проверит health endpoints
+2. Соберёт Docker-образы backend
+3. Поднимет PostgreSQL и backend на портах `8001..8008`
+4. Проверит health endpoints
 
 ---
 
@@ -205,21 +200,10 @@ Value: YOUR_SERVER_IP
 TTL: 3600
 ```
 
-#### 5.2 Получите SSL сертификат
+#### 5.2 HTTPS и домен
 
-```bash
-sudo ./scripts/setup-ssl.sh
-# Введите ваш домен: app.yourdomain.com
-```
-
-Или вручную:
-```bash
-sudo certbot certonly --standalone -d app.yourdomain.com
-```
-
-#### 5.3 Включите HTTPS в Nginx
-
-`nginx` в этой схеме нужен только для статики. Если вам нужен HTTPS именно для API, текущий прямой портовый контракт клиента предполагает отдельную настройку TLS перед сервисами или смену архитектуры на single-origin gateway.
+В текущей backend-only схеме API публикуется напрямую на `8001..8008`.  
+Если нужен HTTPS, его нужно ставить отдельным reverse proxy перед сервисами или переводить архитектуру на единый gateway.
 
 ---
 
@@ -239,7 +223,7 @@ sudo certbot certonly --standalone -d app.yourdomain.com
 | `DB_USER` | Пользователь БД |
 | `DB_NAME` | Имя базы данных |
 | `SECRET_KEY` | Секретный ключ приложения |
-| `API_HOST` | Домен или IP сервера |
+| `API_HOST` | IP или домен сервера |
 
 #### 2. Сгенерируйте SSH ключ
 
@@ -264,39 +248,9 @@ cat ~/.ssh/github_actions
 #### 4. Готово!
 
 Теперь при каждом push в `main` или `master` ветку workflow:
-1. собирает Flutter Web как CI-проверку
-2. подключается к серверу
-3. запускает `./scripts/deploy.sh`
-4. проверяет health у backend-сервисов
-
----
-
-## 🔒 SSL Сертификаты
-
-### Let's Encrypt (бесплатно)
-
-```bash
-# Установка certbot
-sudo apt install -y certbot
-
-# Получение сертификата
-sudo certbot certonly --standalone -d your-domain.com
-
-# Автообновление
-sudo systemctl enable certbot.timer
-sudo systemctl start certbot.timer
-```
-
-### Ручная настройка
-
-```bash
-# Скопируйте сертификаты
-sudo cp /etc/letsencrypt/live/your-domain.com/fullchain.pem nginx/ssl/cert.pem
-sudo cp /etc/letsencrypt/live/your-domain.com/privkey.pem nginx/ssl/key.pem
-
-# Перезапустите Nginx
-docker restart choice_nginx
-```
+1. подключается к серверу
+2. запускает `./scripts/deploy.sh`
+3. проверяет health у backend-сервисов
 
 ---
 
@@ -326,8 +280,8 @@ docker exec choice_postgres pg_dump -U choice_user choice_db > $BACKUP_DIR/choic
 # Удаление старых бэкапов (старше 7 дней)
 find $BACKUP_DIR -name "*.sql" -mtime +7 -delete
 
-# Бэкап файлов
-tar -czf $BACKUP_DIR/files_$DATE.tar.gz /opt/choice-app/nginx/uploads/
+# Бэкап загруженных файлов
+tar -czf $BACKUP_DIR/files_$DATE.tar.gz /opt/choice-app/backend_fastapi/etc/files/
 ```
 
 ---
@@ -338,25 +292,25 @@ tar -czf $BACKUP_DIR/files_$DATE.tar.gz /opt/choice-app/nginx/uploads/
 
 ```bash
 # Все логи
-docker-compose logs
+docker compose logs
 
 # Логи конкретного сервиса
-docker-compose logs auth_service
-docker-compose logs -f postgres  # в реальном времени
+docker compose logs auth_service
+docker compose logs -f postgres  # в реальном времени
 ```
 
 ### Перезапуск сервисов
 
 ```bash
 # Перезапуск всего
-docker-compose restart
+docker compose restart
 
 # Перезапуск одного сервиса
-docker-compose restart auth_service
+docker compose restart auth_service
 
 # Полная пересборка
-docker-compose down
-docker-compose up -d --build
+docker compose down
+docker compose up -d --build
 ```
 
 ### Проверка статуса
@@ -377,7 +331,7 @@ curl http://localhost:8001/docs
 
 ```bash
 # Остановить всё
-docker-compose down
+docker compose down
 
 # Удалить неиспользуемые образы
 docker system prune -a
@@ -487,7 +441,7 @@ python smoke_test_backend.py --host 127.0.0.1 --scheme http --client-email local
 cd /opt/choice-app
 
 # Остановить и удалить контейнеры
-docker-compose down -v
+docker compose down -v
 
 # Удалить образы
 docker rmi $(docker images -q)
@@ -503,7 +457,7 @@ sudo rm -rf /opt/backups
 
 Если возникли проблемы:
 
-1. Проверьте логи: `docker-compose logs -f`
+1. Проверьте логи: `docker compose logs -f`
 2. Проверьте статус: `docker ps`
 3. Проверьте ресурсы: `htop`, `free -h`, `df -h`
 

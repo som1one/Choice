@@ -82,26 +82,6 @@ if docker ps | grep -q choice_postgres; then
     log_info "Backup saved to: $BACKUP_FILE"
 fi
 
-# Build Flutter web if source exists
-if [ -d "client_app_flutter" ]; then
-    log_info "Building Flutter web..."
-    
-    # Check if Flutter is installed locally
-    if command -v flutter &> /dev/null; then
-        cd client_app_flutter
-        flutter build web \
-            --dart-define=USE_REMOTE_API=true \
-            --dart-define=API_HOST="${API_HOST:-localhost}" \
-            --dart-define=API_SCHEME="${API_SCHEME:-http}" \
-            --release
-        cd ..
-        log_info "Flutter web built successfully"
-    else
-        log_warn "Flutter not found locally. Using Docker build..."
-        compose --profile build run --rm flutter_build
-    fi
-fi
-
 # Stop existing containers
 log_info "Stopping existing containers..."
 compose down --remove-orphans
@@ -168,9 +148,9 @@ echo "  Deployment Complete!"
 echo "================================================================"
 echo ""
 echo "Access your application:"
-echo "  • Web App:        http://${API_HOST:-localhost} (optional nginx static host)"
 echo "  • Auth Docs:      http://${API_HOST:-localhost}:8001/docs"
 echo "  • Client Docs:    http://${API_HOST:-localhost}:8002/docs"
+echo "  • Company Docs:   http://${API_HOST:-localhost}:8003/docs"
 echo ""
 echo "Useful commands:"
 echo "  • View logs:      docker compose logs -f"

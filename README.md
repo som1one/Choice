@@ -37,7 +37,7 @@ cp .env.example .env
 
 ## Production модель
 
-Основной контракт клиента с backend сейчас прямой:
+Для сервера разворачивается только backend. Клиенты подключаются к backend напрямую по портам:
 
 - `:8001` - auth
 - `:8002` - client
@@ -48,7 +48,7 @@ cp .env.example .env
 - `:8007` - review
 - `:8008` - file
 
-`nginx` в `docker-compose.yml` оставлен как опциональный static-host для собранного Flutter Web и не используется как обязательный API gateway.
+Flutter не требуется на сервере и не входит в production deploy. Web/mobile клиент собирается и распространяется отдельно.
 
 ## Структура проекта
 

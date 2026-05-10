@@ -13,29 +13,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Setup Flutter
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.41.9'
-        channel: 'stable'
-
-    - name: Build Flutter Web
-      run: |
-        cd client_app_flutter
-        flutter pub get
-        flutter build web \
-          --dart-define=USE_REMOTE_API=true \
-          --dart-define=API_HOST=${{ secrets.API_HOST }} \
-          --dart-define=API_SCHEME=http \
-          --release
-
-    - name: Upload web build artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: flutter-web-build
-        path: client_app_flutter/build/web
-        retention-days: 5
-
     - name: Deploy to Server
       if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
       uses: appleboy/ssh-action@v1.0.0
