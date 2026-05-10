@@ -242,7 +242,7 @@ services:
 
   # Optional Flutter web build that writes to client_app_flutter/build/web.
   flutter_build:
-    image: ghcr.io/cirruslabs/flutter:3.24.0
+    image: ghcr.io/cirruslabs/flutter:3.41.9
     container_name: choice_flutter_build
     volumes:
       - ./client_app_flutter:/app
