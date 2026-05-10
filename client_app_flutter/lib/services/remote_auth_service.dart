@@ -14,6 +14,7 @@ class RemoteAuthService {
     required String email,
     required String password,
     required String city,
+    required bool acceptedTerms,
     String street = '-',
     String phoneNumber = '0000000000',
   }) async {
@@ -24,6 +25,7 @@ class RemoteAuthService {
       'password': password,
       'street': street,
       'city': city,
+      'accepted_terms': acceptedTerms,
       'type': 'Client',
     };
     
@@ -64,6 +66,7 @@ class RemoteAuthService {
     required String companyName,
     required String email,
     required String password,
+    required bool acceptedTerms,
     String street = '-',
     String city = '-',
     String phoneNumber = '0000000000',
@@ -75,6 +78,7 @@ class RemoteAuthService {
       'password': password,
       'street': street,
       'city': city,
+      'accepted_terms': acceptedTerms,
       'type': 'Company',
     };
     

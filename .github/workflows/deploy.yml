@@ -1,0 +1,63 @@
+name: Deploy to Production
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Flutter
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.24.0'
+        channel: 'stable'
+
+    - name: Build Flutter Web
+      run: |
+        cd client_app_flutter
+        flutter pub get
+        flutter build web \
+          --dart-define=USE_REMOTE_API=true \
+          --dart-define=API_HOST=${{ secrets.API_HOST }} \
+          --dart-define=API_SCHEME=http \
+          --release
+
+    - name: Upload web build artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: flutter-web-build
+        path: client_app_flutter/build/web
+        retention-days: 5
+
+    - name: Deploy to Server
+      if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+      uses: appleboy/ssh-action@v1.0.0
+      with:
+        host: ${{ secrets.SERVER_IP }}
+        username: ${{ secrets.SERVER_USER }}
+        key: ${{ secrets.SSH_PRIVATE_KEY }}
+        script_stop: true
+        script: |
+          cd /opt/choice-app
+          
+          chmod +x ./scripts/deploy.sh
+          ./scripts/deploy.sh
+
+          # Health check for the direct-port deployment model
+          curl -f http://localhost:8001/health
+          curl -f http://localhost:8005/health
+
+    - name: Notify on Success
+      if: success()
+      run: echo "✅ Deployment successful!"
+
+    - name: Notify on Failure
+      if: failure()
+      run: echo "❌ Deployment failed!"

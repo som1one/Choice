@@ -19,7 +19,7 @@ import string
 import sys
 import time
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from urllib import error, parse, request
 
@@ -31,12 +31,14 @@ class Config:
     auth_port: int = 8001
     client_port: int = 8002
     company_port: int = 8003
+    ordering_port: int = 8005
 
     def url(self, service: str, path: str) -> str:
         port = {
             "auth": self.auth_port,
             "client": self.client_port,
             "company": self.company_port,
+            "ordering": self.ordering_port,
         }[service]
         return f"{self.scheme}://{self.host}:{port}{path}"
 
@@ -199,6 +201,111 @@ def get_company_requests(config: Config, token: str) -> list[dict[str, Any]]:
     return payload
 
 
+def create_order_response(
+    config: Config,
+    token: str,
+    *,
+    order_request_id: int,
+    receiver_id: str,
+    price: int,
+    prepayment: int,
+    deadline: int,
+    enrollment_date: str,
+) -> dict[str, Any]:
+    payload = {
+        "order_request_id": order_request_id,
+        "receiver_id": receiver_id,
+        "price": price,
+        "prepayment": prepayment,
+        "deadline": deadline,
+        "response_text": "Smoke response from company",
+        "specialist_name": "Smoke Specialist",
+        "specialist_phone": "+79990000000",
+        "enrollment_date": enrollment_date,
+    }
+    status, response_payload = _json_request(
+        "POST",
+        config.url("ordering", "/api/order/create"),
+        payload,
+        token=token,
+    )
+    _expect(status, 200, response_payload, "create order response")
+    if not isinstance(response_payload, dict):
+        raise RuntimeError(f"create order response returned unexpected shape: {response_payload}")
+    return response_payload
+
+
+def get_orders(
+    config: Config,
+    token: str,
+    *,
+    order_request_id: int | None = None,
+) -> list[dict[str, Any]]:
+    suffix = f"?order_request_id={order_request_id}" if order_request_id is not None else ""
+    status, payload = _json_request(
+        "GET",
+        config.url("ordering", f"/api/order/get{suffix}"),
+        token=token,
+    )
+    _expect(status, 200, payload, "get orders")
+    if not isinstance(payload, list):
+        raise RuntimeError(f"orders returned unexpected shape: {payload}")
+    return payload
+
+
+def confirm_enrollment(config: Config, token: str, order_id: int) -> dict[str, Any]:
+    status, payload = _json_request(
+        "PUT",
+        config.url("ordering", f"/api/order/confirmEnrollmentDate?order_id={order_id}"),
+        body={},
+        token=token,
+    )
+    _expect(status, 200, payload, "confirm enrollment")
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"confirm enrollment returned unexpected shape: {payload}")
+    return payload
+
+
+def finish_order(config: Config, token: str, order_id: int) -> dict[str, Any]:
+    status, payload = _json_request(
+        "PUT",
+        config.url("ordering", f"/api/order/finishOrder?order_id={order_id}"),
+        body={},
+        token=token,
+    )
+    _expect(status, 200, payload, "finish order")
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"finish order returned unexpected shape: {payload}")
+    return payload
+
+
+def check_review_eligibility(
+    config: Config,
+    *,
+    client_id: str,
+    company_id: str,
+    reviewer_id: str,
+    reserve: bool,
+) -> dict[str, Any]:
+    query = parse.urlencode(
+        {
+            "client_id": client_id,
+            "company_id": company_id,
+            "reviewer_id": reviewer_id,
+            "reserve": str(reserve).lower(),
+        }
+    )
+    status, payload = _json_request(
+        "PUT",
+        config.url("ordering", f"/api/order/addReview?{query}"),
+        body={},
+    )
+    _expect(status, 200, payload, "check review eligibility")
+    if not isinstance(payload, dict):
+        raise RuntimeError(f"review eligibility returned unexpected shape: {payload}")
+    return payload
+
+
 def wait_for_request(
     loader,
     request_id: int,
@@ -219,6 +326,25 @@ def wait_for_request(
     return latest
 
 
+def wait_for_order(
+    loader,
+    order_id: int,
+    attempts: int = 5,
+    delay_seconds: float = 1.5,
+) -> list[dict[str, Any]]:
+    latest: list[dict[str, Any]] = []
+    for _ in range(attempts):
+        latest = loader()
+        for item in latest:
+            try:
+                if int(item.get("id", -1)) == order_id:
+                    return latest
+            except Exception:
+                continue
+        time.sleep(delay_seconds)
+    return latest
+
+
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Smoke test Choice backend")
     parser.add_argument("--host", default="77.95.203.148")
@@ -231,12 +357,17 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--city", default="Москва")
     parser.add_argument("--street", default="Ленина 1")
     parser.add_argument("--radius", type=int, default=20000)
+    parser.add_argument("--ordering-port", type=int, default=8005)
     return parser.parse_args()
 
 
 def main() -> int:
     args = parse_args()
-    config = Config(scheme=args.scheme, host=args.host)
+    config = Config(
+        scheme=args.scheme,
+        host=args.host,
+        ordering_port=args.ordering_port,
+    )
 
     _print_step("Company Login")
     company_token = login(config, args.company_email, args.company_password)
@@ -271,9 +402,15 @@ def main() -> int:
         f"{client_profile.get('name')} {client_profile.get('surname')} "
         f"city={client_profile.get('city')} street={client_profile.get('street')}"
     )
+    client_guid = str(client_profile.get("guid") or "")
+    company_guid = str(company_profile.get("guid") or "")
+    if not client_guid:
+        raise RuntimeError(f"client profile has no guid: {client_profile}")
+    if not company_guid:
+        raise RuntimeError(f"company profile has no guid: {company_profile}")
 
     _print_step("Create Request")
-    marker = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    marker = datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S")
     description = f"Smoke test request {marker}"
     created = create_order_request(
         config=config,
@@ -316,7 +453,100 @@ def main() -> int:
         )
     print(f"company sees request_id={request_id}")
 
-    print("\nSUCCESS: backend inquiry flow is healthy")
+    _print_step("Create Company Response")
+    enrollment_date = (
+        datetime.now(UTC).replace(microsecond=0) + timedelta(days=1)
+    ).isoformat()
+    created_order = create_order_response(
+        config,
+        company_token,
+        order_request_id=request_id,
+        receiver_id=client_guid,
+        price=2400,
+        prepayment=1200,
+        deadline=5,
+        enrollment_date=enrollment_date,
+    )
+    order_id = int(created_order["id"])
+    print(f"company created order_id={order_id}")
+
+    _print_step("Verify Client Sees Response")
+    client_orders_for_request = wait_for_order(
+        lambda: get_orders(config, client_token, order_request_id=request_id),
+        order_id=order_id,
+    )
+    if not any(int(item.get("id", -1)) == order_id for item in client_orders_for_request):
+        raise RuntimeError(
+            "client does not see company response "
+            f"order_id={order_id}. payload={client_orders_for_request}"
+        )
+    print(f"client sees order_id={order_id}")
+
+    _print_step("Confirm Enrollment")
+    confirmed_order = confirm_enrollment(config, client_token, order_id)
+    if not confirmed_order.get("is_enrolled") or not confirmed_order.get("is_date_confirmed"):
+        raise RuntimeError(f"order was not confirmed correctly: {confirmed_order}")
+    print("client confirmed enrollment date")
+
+    _print_step("Verify Both Sides See Confirmed Order")
+    company_orders = wait_for_order(
+        lambda: get_orders(config, company_token),
+        order_id=order_id,
+    )
+    client_orders = wait_for_order(
+        lambda: get_orders(config, client_token),
+        order_id=order_id,
+    )
+    company_view = next(
+        (item for item in company_orders if int(item.get("id", -1)) == order_id),
+        None,
+    )
+    client_view = next(
+        (item for item in client_orders if int(item.get("id", -1)) == order_id),
+        None,
+    )
+    if company_view is None or client_view is None:
+        raise RuntimeError(
+            "confirmed order missing in one of the participant views "
+            f"company={company_orders} client={client_orders}"
+        )
+    if not company_view.get("is_enrolled") or not client_view.get("is_enrolled"):
+        raise RuntimeError(
+            "confirmed order is missing enrollment flags "
+            f"company={company_view} client={client_view}"
+        )
+    print("both client and company see the confirmed order")
+
+    _print_step("Finish Order")
+    finished_order = finish_order(config, company_token, order_id)
+    if int(finished_order.get("status", 0)) != 2:
+        raise RuntimeError(f"order was not finished correctly: {finished_order}")
+    print("company finished the order")
+
+    _print_step("Verify Review Eligibility")
+    review_check = check_review_eligibility(
+        config,
+        client_id=client_guid,
+        company_id=company_guid,
+        reviewer_id=client_guid,
+        reserve=False,
+    )
+    if not review_check.get("success"):
+        raise RuntimeError(f"review check failed after finish: {review_check}")
+    print("review check succeeded")
+
+    review_reservation = check_review_eligibility(
+        config,
+        client_id=client_guid,
+        company_id=company_guid,
+        reviewer_id=client_guid,
+        reserve=True,
+    )
+    if not review_reservation.get("success"):
+        raise RuntimeError(f"review reservation failed after finish: {review_reservation}")
+    print("review reservation succeeded")
+
+    print("\nSUCCESS: backend inquiry-to-order lifecycle is healthy")
     return 0
 
 

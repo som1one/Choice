@@ -5,7 +5,7 @@ import '../models/order_request_model.dart';
 import '../services/remote_inquiry_service.dart';
 import '../services/remote_file_service.dart';
 import '../constants/categories.dart';
-import 'order_screen.dart';
+import '../navigation/client_tab_navigator.dart';
 
 class OrderRequestScreen extends StatefulWidget {
   final OrderRequestModel orderRequest;
@@ -164,9 +164,12 @@ class _OrderRequestScreenState extends State<OrderRequestScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Заявка успешно обновлена')),
         );
-        Navigator.pushReplacement(
+        Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (context) => const OrderScreen()),
+          MaterialPageRoute(
+            builder: (context) => const ClientTabNavigator(initialIndex: 1),
+          ),
+          (route) => false,
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

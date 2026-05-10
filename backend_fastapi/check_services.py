@@ -20,21 +20,21 @@ def check_service(name: str, url: str) -> bool:
     try:
         response = requests.get(url, timeout=2)
         if response.status_code == 200:
-            print(f"✅ {name:15} - OK ({url})")
+            print(f"[OK]   {name:15} - OK ({url})")
             return True
         else:
-            print(f"❌ {name:15} - Error {response.status_code} ({url})")
+            print(f"[FAIL] {name:15} - Error {response.status_code} ({url})")
             return False
     except requests.exceptions.ConnectionError:
-        print(f"❌ {name:15} - Connection refused ({url})")
+        print(f"[FAIL] {name:15} - Connection refused ({url})")
         return False
     except Exception as e:
-        print(f"❌ {name:15} - {e} ({url})")
+        print(f"[FAIL] {name:15} - {e} ({url})")
         return False
 
 def main():
     """Главная функция"""
-    print("🔍 Checking FastAPI services...")
+    print("Checking FastAPI services...")
     print("=" * 60)
     
     all_ok = True
@@ -44,10 +44,10 @@ def main():
     
     print("=" * 60)
     if all_ok:
-        print("✅ All services are running!")
+        print("All services are running!")
         sys.exit(0)
     else:
-        print("❌ Some services are not running")
+        print("Some services are not running")
         sys.exit(1)
 
 if __name__ == "__main__":

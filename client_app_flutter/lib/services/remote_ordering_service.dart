@@ -2,7 +2,13 @@ import 'api_client.dart';
 import 'api_config.dart';
 
 class RemoteOrderingService {
-  /// Создать заказ (ответ компании на заявку)
+  int? _extractOrderId(Map<String, dynamic> order) {
+    final rawId = order['id'] ?? order['orderId'];
+    if (rawId is num) return rawId.toInt();
+    return int.tryParse(rawId?.toString() ?? '');
+  }
+
+  /// Create an order response from a company for a client inquiry.
   Future<Map<String, dynamic>?> createOrder({
     required String receiverId,
     required int orderRequestId,
@@ -28,16 +34,15 @@ class RemoteOrderingService {
       if (specialistPhone != null) 'specialist_phone': specialistPhone,
     };
 
-    final json = await ApiClient.postJson(
+    return await ApiClient.postJson(
       '/api/order/create',
       body,
       baseUrl: ApiConfig.orderingBaseUrl,
       throwOnError: throwOnError,
     );
-    return json;
   }
 
-  /// Изменить дату записи в заказе
+  /// Change the proposed enrollment date.
   Future<Map<String, dynamic>?> changeOrderEnrollmentDate({
     required int orderId,
     required DateTime newDate,
@@ -46,36 +51,32 @@ class RemoteOrderingService {
       'order_id': orderId,
       'enrollment_date': newDate.toIso8601String(),
     };
-    final json = await ApiClient.putJson(
+    return await ApiClient.putJson(
       '/api/order/changeOrderEnrollmentDate',
       body,
       baseUrl: ApiConfig.orderingBaseUrl,
     );
-    return json;
   }
 
-  /// Подтвердить дату записи (клиент подтверждает предложенную компанией дату)
+  /// Confirm the enrollment date proposed by the company.
   Future<Map<String, dynamic>?> confirmEnrollmentDate(int orderId) async {
-    final json = await ApiClient.putJson(
+    return await ApiClient.putJson(
       '/api/order/confirmEnrollmentDate?order_id=$orderId',
       <String, dynamic>{},
       baseUrl: ApiConfig.orderingBaseUrl,
     );
-    return json;
   }
 
-  /// Записаться (клиент записывается на услугу)
+  /// Legacy alias used by some screens for client confirmation.
   Future<Map<String, dynamic>?> enroll(int orderId) async {
-    final json = await ApiClient.putJson(
+    return await ApiClient.putJson(
       '/api/order/enroll?order_id=$orderId',
       <String, dynamic>{},
       baseUrl: ApiConfig.orderingBaseUrl,
     );
-    return json;
   }
 
-  /// Получить все заказы текущего пользователя
-  /// Если указан orderRequestId, возвращает заказы по заявке (ответы компаний)
+  /// Get all orders for the current user, or all responses for one request.
   Future<List<Map<String, dynamic>>?> getOrders({int? orderRequestId}) async {
     final url = orderRequestId != null
         ? '/api/order/get?order_request_id=$orderRequestId'
@@ -87,8 +88,6 @@ class RemoteOrderingService {
         baseUrl: ApiConfig.orderingBaseUrl,
       );
 
-      // Если запрос вернул null (ошибка сети или сервера), возвращаем пустой список
-      // чтобы не ломать UI, но логируем ошибку
       if (json == null) {
         print(
           'Warning: getOrders returned null for orderRequestId=$orderRequestId',
@@ -96,59 +95,75 @@ class RemoteOrderingService {
         return [];
       }
 
-      // Если ответ - это список, возвращаем его
       if (json is List) {
-        return (json as List).map((e) => e as Map<String, dynamic>).toList();
+        return (json as List).cast<Map<String, dynamic>>();
       }
 
-      // Если ответ - это объект, пытаемся извлечь список заказов
       if (json is Map<String, dynamic>) {
         final orders = json['orders'] ?? json['data'] ?? json['result'];
         if (orders is List) {
-          return (orders as List)
-              .map((e) => e as Map<String, dynamic>)
-              .toList();
+          return orders.map((e) => e as Map<String, dynamic>).toList();
         }
-        // Если в объекте нет списка, но есть другие данные, логируем
         print(
           'Warning: getOrders response is object but no orders list found: $json',
         );
       }
 
-      // Если формат неожиданный, возвращаем пустой список
       print(
         'Warning: Unexpected response format in getOrders: ${json.runtimeType}',
       );
       return [];
     } catch (e) {
-      // Обрабатываем любые исключения и возвращаем пустой список
       print('Error in getOrders: $e');
       return [];
     }
   }
 
-  /// Завершить заказ
+  /// Fetch a single order by id by reusing the list endpoints the backend exposes today.
+  Future<Map<String, dynamic>?> getOrderById(
+    int orderId, {
+    int? orderRequestId,
+  }) async {
+    final scopedOrders = await getOrders(orderRequestId: orderRequestId);
+    if (scopedOrders != null) {
+      for (final order in scopedOrders) {
+        if (_extractOrderId(order) == orderId) {
+          return order;
+        }
+      }
+    }
+
+    final allOrders = await getOrders();
+    if (allOrders != null) {
+      for (final order in allOrders) {
+        if (_extractOrderId(order) == orderId) {
+          return order;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  /// Finish an order.
   Future<Map<String, dynamic>?> finish(int orderId) async {
-    final json = await ApiClient.putJson(
+    return await ApiClient.putJson(
       '/api/order/finishOrder?order_id=$orderId',
       <String, dynamic>{},
       baseUrl: ApiConfig.orderingBaseUrl,
     );
-    return json;
   }
 
-  /// Отменить запись (отмена enrollment)
+  /// Cancel an enrollment and mark the order as canceled.
   Future<Map<String, dynamic>?> cancel(int orderId) async {
-    final json = await ApiClient.putJson(
+    return await ApiClient.putJson(
       '/api/order/cancelEnrollment?order_id=$orderId',
       <String, dynamic>{},
       baseUrl: ApiConfig.orderingBaseUrl,
     );
-    return json;
   }
 
-  /// Проверить возможность оставить отзыв
-  /// Возвращает true, если есть завершенный заказ и отзыв еще не оставлен
+  /// Check whether the current user can add a review.
   Future<bool> canAddReview({
     required String clientId,
     required String companyId,

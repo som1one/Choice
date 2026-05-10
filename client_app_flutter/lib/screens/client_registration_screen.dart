@@ -6,6 +6,7 @@ import 'category_screen.dart';
 import '../services/auth_service.dart';
 import '../utils/auth_guard.dart';
 import '../utils/auth_input_validator.dart';
+import '../widgets/service_agreement_dialog.dart';
 
 class ClientRegistrationScreen extends StatefulWidget {
   const ClientRegistrationScreen({super.key});
@@ -27,6 +28,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
   bool _emailValidationError = false;
   bool _weakPasswordError = false;
   bool _passwordsNotMatchedError = false;
+  bool _acceptedTerms = false;
 
   String _selectedCity = 'Омск';
   final List<String> _cities = [
@@ -103,6 +105,10 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         !_passwordsNotMatchedError;
   }
 
+  bool _canSubmitClient() {
+    return _isFormValid() && _acceptedTerms;
+  }
+
   Future<void> _validateAndRegister() async {
     if (!_isFormValid()) {
       if (!_areAllFieldsFilled()) {
@@ -127,6 +133,15 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
       return;
     }
 
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Подтвердите согласие с условиями сервиса'),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _emailError = false;
     });
@@ -143,6 +158,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
         phoneNumber: _phoneController.text.trim().isNotEmpty
             ? _phoneController.text.trim()
             : '0000000000',
+        acceptedTerms: _acceptedTerms,
       );
       // Автоматически переходим на главный экран после регистрации
       if (!mounted) return;
@@ -357,6 +373,18 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: ServiceAgreementCheckbox(
+                      accepted: _acceptedTerms,
+                      onChanged: (value) {
+                        setState(() {
+                          _acceptedTerms = value;
+                        });
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   // Две кнопки рядом
                   SizedBox(
@@ -366,7 +394,7 @@ class _ClientRegistrationScreenState extends State<ClientRegistrationScreen> {
                         Expanded(
                           child: _buildActionButton(
                             'Регистрация клиента',
-                            isEnabled: _isFormValid(),
+                            isEnabled: _canSubmitClient(),
                           ),
                         ),
                         const SizedBox(width: 10),

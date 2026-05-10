@@ -36,10 +36,6 @@ if __name__ == "__main__":
     
     port = port or service_ports[service_name]
     
-    # Импорт приложения
-    service_module = f"services.{service_name}.main"
-    app_module = __import__(service_module, fromlist=["app"])
-    app = app_module.app
-    
     print(f"Starting {service_name} on port {port}...")
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=True)
+    service_module = f"services.{service_name}.main:app"
+    uvicorn.run(service_module, host="0.0.0.0", port=port, reload=False)

@@ -233,6 +233,7 @@ class AuthService {
     required String city,
     required String street,
     required String phoneNumber,
+    required bool acceptedTerms,
   }) async {
     String? remoteToken;
     if (ApiConfig.isConfigured) {
@@ -243,6 +244,7 @@ class AuthService {
         city: city,
         street: street,
         phoneNumber: phoneNumber,
+        acceptedTerms: acceptedTerms,
       );
       if (remoteResult != null && !remoteResult.success) {
         return;
@@ -258,6 +260,7 @@ class AuthService {
       'city': city,
       'street': street.trim(),
       'phoneNumber': phoneNumber.trim(),
+      'acceptedTerms': acceptedTerms,
     });
     await prefs.setString(_clientCredentialsKey, payload);
     if (remoteToken != null && remoteToken.isNotEmpty) {
@@ -353,6 +356,7 @@ class AuthService {
     required String email,
     required String password,
     required String phoneNumber,
+    required bool acceptedTerms,
     String? companyType,
     String? inn,
     String? city,
@@ -375,6 +379,7 @@ class AuthService {
         city: normalizedCity,
         street: normalizedStreet,
         phoneNumber: phoneNumber,
+        acceptedTerms: acceptedTerms,
       );
       if (remoteResult != null && !remoteResult.success) {
         throw Exception('Ошибка регистрации');
@@ -391,6 +396,7 @@ class AuthService {
       'city': normalizedCity,
       'street': normalizedStreet,
       'phoneNumber': phoneNumber.trim(),
+      'acceptedTerms': acceptedTerms,
       if (companyType != null && companyType.trim().isNotEmpty)
         'companyType': companyType.trim(),
     });

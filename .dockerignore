@@ -1,0 +1,79 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Uploads (will be mounted as volume)
+backend_fastapi/etc/files/*
+!backend_fastapi/etc/files/.gitkeep
+
+# Flutter
+client_app_flutter/build/
+client_app_flutter/.dart_tool/
+client_app_flutter/.packages
+client_app_flutter/pubspec.lock
+client_app_flutter/flutter_*.png
+client_app_flutter/linked_*.ds
+client_app_flutter/unlinked.ds
+client_app_flutter/unlinked_spec.ds
+
+# Documentation
+*.md
+!README.md
+
+# CI/CD
+.github/
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Logs
+*.log
+logs/
+log/
+
+# Testing
+tests/
+test/
+*_test.py
+smoke_test_*.py
+
+# Local scripts
+*.ps1
+start_local*.py
+seed_local_*.py
+
+# Misc
+LOCAL_TESTING_GUIDE.md
+DEPLOY_*.md

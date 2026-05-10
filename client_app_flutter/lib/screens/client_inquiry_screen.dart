@@ -6,6 +6,7 @@ import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
 
 class ClientInquiryScreen extends StatefulWidget {
   const ClientInquiryScreen({super.key});
@@ -48,6 +49,10 @@ class _ClientInquiryScreenState extends State<ClientInquiryScreen> {
     }
 
     return Scaffold(
+      bottomNavigationBar: const PersistentRoleBottomNav(
+        type: RoleBottomNavType.company,
+        currentIndex: 0,
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(

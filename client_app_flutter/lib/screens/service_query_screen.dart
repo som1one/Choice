@@ -16,6 +16,7 @@ import '../services/api_exception.dart';
 import '../services/remote_file_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
 
 class ServiceQueryScreen extends StatefulWidget {
   final String category;
@@ -245,6 +246,10 @@ class _ServiceQueryScreenState extends State<ServiceQueryScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      bottomNavigationBar: const PersistentRoleBottomNav(
+        type: RoleBottomNavType.client,
+        currentIndex: 0,
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(

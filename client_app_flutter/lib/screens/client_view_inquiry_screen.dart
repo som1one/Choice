@@ -10,6 +10,7 @@ import 'company_detail_screen.dart';
 import '../services/auth_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
 
 class ClientViewInquiryScreen extends StatefulWidget {
   const ClientViewInquiryScreen({super.key});
@@ -127,14 +128,11 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
 
   /// Обновить данные (pull-to-refresh)
   Future<void> _refreshData() async {
-    if (_inquiry != null) {
-      await _loadCompanyResponses(_inquiry!);
-    }
+    await _loadData();
   }
 
-  void _selectCompany(CompanyOrderResponse response) {
-    // Открываем детальный экран компании
-    Navigator.push(
+  Future<void> _selectCompany(CompanyOrderResponse response) async {
+    await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => CompanyDetailScreen(
@@ -144,6 +142,8 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
         ),
       ),
     );
+    if (!mounted) return;
+    await _refreshData();
   }
 
   @override
@@ -179,6 +179,10 @@ class _ClientViewInquiryScreenState extends State<ClientViewInquiryScreen> {
     }
 
     return Scaffold(
+      bottomNavigationBar: const PersistentRoleBottomNav(
+        type: RoleBottomNavType.client,
+        currentIndex: 1,
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(

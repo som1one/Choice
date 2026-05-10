@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import 'service_query_screen.dart';
-import '../utils/auth_guard.dart';
-import '../services/auth_service.dart';
+
+import '../screens/service_query_screen.dart';
 import '../services/api_exception.dart';
+import '../services/auth_service.dart';
 import '../services/remote_client_service.dart';
+import '../utils/auth_guard.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
 
@@ -15,8 +16,9 @@ class CategoryScreen extends StatefulWidget {
 }
 
 class _CategoryScreenState extends State<CategoryScreen> {
-  String? _city; // Загружается из API
+  String? _city;
   bool _isLoadingCity = true;
+
   final List<String> _categories = const [
     'Автоуслуги',
     'Услуги строителя',
@@ -53,7 +55,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
             }
           }
         } on ApiException catch (e) {
-          // Сразу после регистрации профиль клиента может появиться с небольшой задержкой.
           if (e.statusCode != 404) {
             break;
           }
@@ -66,6 +67,7 @@ class _CategoryScreenState extends State<CategoryScreen> {
         }
       }
     }
+
     if (mounted) {
       setState(() {
         _isLoadingCity = false;
@@ -81,18 +83,15 @@ class _CategoryScreenState extends State<CategoryScreen> {
         child: Container(
           decoration: const BoxDecoration(
             border: Border(
-              bottom: BorderSide(
-                color: Colors.black,
-                width: 2.5,
-              ),
+              bottom: BorderSide(color: Colors.black, width: 2.5),
             ),
           ),
           child: AppBar(
             backgroundColor: Colors.white,
             elevation: 0,
-            leading: Padding(
-              padding: const EdgeInsets.only(left: 16.0),
-              child: const ChoiceLogoIcon(size: 30),
+            leading: const Padding(
+              padding: EdgeInsets.only(left: 16.0),
+              child: ChoiceLogoIcon(size: 30),
             ),
             title: Text(
               _city ?? (_isLoadingCity ? 'Загрузка...' : ''),
@@ -103,21 +102,20 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ),
             ),
             centerTitle: true,
-                  actions: [
-                    Padding(
-                      padding: const EdgeInsets.only(right: 16.0),
-                      child: IconButton(
-                        icon: _buildPersonIcon(),
-                        onPressed: () => AuthGuard.openClientCabinet(context),
-                      ),
-                    ),
-                  ],
+            actions: [
+              Padding(
+                padding: const EdgeInsets.only(right: 16.0),
+                child: IconButton(
+                  icon: _buildPersonIcon(),
+                  onPressed: () => AuthGuard.openClientCabinet(context),
+                ),
+              ),
+            ],
           ),
         ),
       ),
       body: Stack(
         children: [
-          // Фоновая карта
           Container(
             decoration: const BoxDecoration(
               color: Colors.white,
@@ -128,45 +126,51 @@ class _CategoryScreenState extends State<CategoryScreen> {
               ),
             ),
           ),
-          // Основной контент
-          Center(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 16.0),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  // Контейнер с категориями
-                  Center(
-                    child: SizedBox(
-                      width: MediaQuery.of(context).size.width * 0.75,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.lightBlue[100]?.withValues(alpha: 0.4),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: GridView.builder(
-                          shrinkWrap: true,
-                          physics: const NeverScrollableScrollPhysics(),
-                          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 2,
-                            crossAxisSpacing: 10,
-                            mainAxisSpacing: 10,
-                            childAspectRatio: 2.8,
+          SafeArea(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24.0,
+                    vertical: 16.0,
+                  ),
+                  child: ConstrainedBox(
+                    constraints: BoxConstraints(
+                      minHeight: constraints.maxHeight - 32,
+                    ),
+                    child: Center(
+                      child: SizedBox(
+                        width: MediaQuery.of(context).size.width * 0.75,
+                        child: Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.lightBlue[100]?.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(20),
                           ),
-                          itemCount: _categories.length,
-                          itemBuilder: (context, index) {
-                            return _buildCategoryButton(
-                              context,
-                              _categories[index],
-                            );
-                          },
+                          child: GridView.builder(
+                            shrinkWrap: true,
+                            physics: const NeverScrollableScrollPhysics(),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 2,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  childAspectRatio: 2.8,
+                                ),
+                            itemCount: _categories.length,
+                            itemBuilder: (context, index) {
+                              return _buildCategoryButton(
+                                context,
+                                _categories[index],
+                              );
+                            },
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ],
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -213,46 +217,4 @@ class _CategoryScreenState extends State<CategoryScreen> {
   Widget _buildPersonIcon() {
     return const ProfileCornerIcon(userType: UserType.client, size: 28);
   }
-}
-
-class _PersonIconPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = Colors.black
-      ..style = PaintingStyle.fill;
-
-    // Рисуем голову (круг)
-    final headRadius = size.width * 0.25;
-    canvas.drawCircle(
-      Offset(size.width / 2, headRadius),
-      headRadius,
-      paint,
-    );
-
-    // Рисуем тело (прямоугольник с вогнутой нижней частью - две "ножки")
-    final bodyWidth = size.width * 0.7;
-    final bodyHeight = size.height * 0.5;
-    final bodyTop = headRadius * 2.1;
-    final bodyLeft = (size.width - bodyWidth) / 2;
-    final bodyBottom = bodyTop + bodyHeight;
-    final indentWidth = bodyWidth * 0.25;
-    final indentDepth = bodyHeight * 0.15;
-
-    final path = Path()
-      ..moveTo(bodyLeft, bodyTop)
-      ..lineTo(bodyLeft + bodyWidth, bodyTop)
-      ..lineTo(bodyLeft + bodyWidth, bodyBottom - indentDepth)
-      ..lineTo(bodyLeft + bodyWidth - indentWidth, bodyBottom - indentDepth)
-      ..lineTo(bodyLeft + bodyWidth - indentWidth, bodyBottom)
-      ..lineTo(bodyLeft + indentWidth, bodyBottom)
-      ..lineTo(bodyLeft + indentWidth, bodyBottom - indentDepth)
-      ..lineTo(bodyLeft, bodyBottom - indentDepth)
-      ..close();
-
-    canvas.drawPath(path, paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

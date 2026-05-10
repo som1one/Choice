@@ -5,15 +5,23 @@ import '../screens/chats_screen.dart';
 import '../screens/account_screen.dart';
 
 class ClientTabNavigator extends StatefulWidget {
-  const ClientTabNavigator({super.key});
+  final int initialIndex;
+
+  const ClientTabNavigator({super.key, this.initialIndex = 0});
 
   @override
   State<ClientTabNavigator> createState() => _ClientTabNavigatorState();
 }
 
 class _ClientTabNavigatorState extends State<ClientTabNavigator> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   int _unreadMessagesCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
 
   void _onTabTapped(int index) {
     setState(() {

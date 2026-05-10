@@ -591,8 +591,14 @@ async def delete_company(
 ):
     """Удаление компании (админ)"""
     repository = CompanyRepository(db)
+    company = await repository.get(id)
+    if not company:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Company not found"
+        )
+
     result = await repository.delete(id)
-    
     if not result:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

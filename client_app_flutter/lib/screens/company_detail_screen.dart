@@ -10,6 +10,8 @@ import 'chat_screen.dart';
 import '../services/auth_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
+import '../widgets/review_phrase_dialog.dart';
 
 class CompanyDetailScreen extends StatefulWidget {
   final Map<String, dynamic> company;
@@ -37,6 +39,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
   bool _isFinishingOrder = false;
   bool _isSubmittingReview = false;
   bool _canLeaveReview = false;
+  bool _hasOwnReview = false;
   final RemoteChatService _chatService = RemoteChatService();
 
   @override
@@ -62,14 +65,55 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     return value;
   }
 
+  int? _resolveOrderRequestId() {
+    final rawOrderRequestId =
+        widget.order['order_request_id'] ?? widget.order['orderRequestId'];
+    if (rawOrderRequestId is num) {
+      return rawOrderRequestId.toInt();
+    }
+    return int.tryParse(rawOrderRequestId?.toString() ?? '');
+  }
+
+  void _applyOrderSnapshot(Map<String, dynamic> snapshot) {
+    widget.order
+      ..clear()
+      ..addAll(snapshot);
+  }
+
+  Future<void> _reloadOrderFromServer({Map<String, dynamic>? fallback}) async {
+    final orderId = _resolveOrderId();
+    if (orderId == null) {
+      if (fallback != null) {
+        _applyOrderSnapshot(fallback);
+      }
+      return;
+    }
+
+    final freshOrder = await _orderingService.getOrderById(
+      orderId,
+      orderRequestId: _resolveOrderRequestId(),
+    );
+
+    if (freshOrder != null) {
+      _applyOrderSnapshot(freshOrder);
+      return;
+    }
+
+    if (fallback != null) {
+      _applyOrderSnapshot(fallback);
+    }
+  }
+
   Future<void> _checkCanLeaveReview() async {
     final companyId = _resolveCompanyId();
     if (companyId == null) return;
 
     final canLeave = await _reviewService.canSendReview(companyId);
+    final hasOwnReview = await _reviewService.hasOwnReview(companyId);
     if (!mounted) return;
     setState(() {
-      _canLeaveReview = canLeave;
+      _hasOwnReview = hasOwnReview;
+      _canLeaveReview = canLeave && !hasOwnReview;
     });
   }
 
@@ -127,19 +171,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
         );
       }
 
-      if (result != null) {
-        widget.order['status'] = parseOrderStatus(result);
-        widget.order['is_date_confirmed'] =
-            result['is_date_confirmed'] ?? result['isDateConfirmed'] ?? true;
-        widget.order['is_enrolled'] =
-            result['is_enrolled'] ?? result['isEnrolled'] ?? true;
-        if (result['enrollment_date'] != null) {
-          widget.order['enrollment_date'] = result['enrollment_date'];
-        }
-      } else {
-        widget.order['is_date_confirmed'] = true;
-        widget.order['is_enrolled'] = true;
-      }
+      await _reloadOrderFromServer(fallback: result);
 
       if (mounted) {
         await _checkCanLeaveReview();
@@ -228,15 +260,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       final result = await _orderingService.finish(orderId);
       if (!mounted) return;
       if (result != null) {
-        widget.order['status'] = parseOrderStatus(result);
-        widget.order['is_date_confirmed'] =
-            result['is_date_confirmed'] ??
-            result['isDateConfirmed'] ??
-            widget.order['is_date_confirmed'];
-        widget.order['is_enrolled'] =
-            result['is_enrolled'] ??
-            result['isEnrolled'] ??
-            widget.order['is_enrolled'];
+        await _reloadOrderFromServer(fallback: result);
         await _checkCanLeaveReview();
         setState(() {});
         ScaffoldMessenger.of(
@@ -257,7 +281,11 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     }
   }
 
-  Future<void> _sendCompanyReview({required int grade, String? text}) async {
+  Future<void> _sendCompanyReview({
+    required int grade,
+    int? criterionId,
+    String? text,
+  }) async {
     final companyId = _resolveCompanyId();
     if (companyId == null || _isSubmittingReview) return;
 
@@ -269,10 +297,15 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
       final result = await _reviewService.sendReview(
         guid: companyId,
         grade: grade,
+        criterionId: criterionId,
         text: text,
       );
       if (!mounted) return;
       if (result != null && result['error'] == null) {
+        setState(() {
+          _hasOwnReview = true;
+          _canLeaveReview = false;
+        });
         await _checkCanLeaveReview();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Отзыв о компании отправлен')),
@@ -295,7 +328,32 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     }
   }
 
-  void _showLeaveReviewDialog() {
+  Future<void> _showLeaveReviewDialog() async {
+    final phrases = await _reviewService.getReviewPhrases();
+    if (!mounted) return;
+    if (phrases.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Для отзывов пока не настроены фразы')),
+      );
+      return;
+    }
+
+    final selection = await showReviewPhraseDialog(
+      context: context,
+      title: 'Оценить компанию',
+      phrases: phrases,
+    );
+    if (selection == null) {
+      return;
+    }
+
+    await _sendCompanyReview(
+      grade: selection.grade,
+      criterionId: selection.criterionId,
+      text: selection.text,
+    );
+    return;
+
     int grade = 5;
     final textController = TextEditingController();
 
@@ -409,7 +467,7 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
     final isConfirmed = isOrderConfirmed(order);
 
     return Scaffold(
-      bottomNavigationBar: _buildBottomActionBar(),
+      bottomNavigationBar: _buildBottomSection(),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
@@ -766,9 +824,36 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
                               )
                             : const Icon(Icons.star_outline),
                         label: Text(
+                          _hasOwnReview
+                              ? 'Отзыв уже оставлен'
+                              : _canLeaveReview
+                                  ? 'Оставить отзыв'
+                                  : 'Отзыв недоступен',
+                        ),
+                      ),
+                    ),
+                  ],
+                  if (false && isFinished) ...[
+                    const SizedBox(height: 12),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _canLeaveReview && !_isSubmittingReview
+                            ? _showLeaveReviewDialog
+                            : null,
+                        icon: _isSubmittingReview
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              )
+                            : const Icon(Icons.star_outline),
+                        label: Text(
                           _canLeaveReview
                               ? 'Поставить отзыв'
-                              : 'Отзыв уже оставлен',
+                              : 'Отзыв недоступен',
                         ),
                       ),
                     ),
@@ -916,6 +1001,19 @@ class _CompanyDetailScreenState extends State<CompanyDetailScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildBottomSection() {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        _buildBottomActionBar() ?? const SizedBox.shrink(),
+        const PersistentRoleBottomNav(
+          type: RoleBottomNavType.client,
+          currentIndex: 1,
+        ),
+      ],
     );
   }
 

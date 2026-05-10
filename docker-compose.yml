@@ -1,0 +1,266 @@
+version: '3.8'
+
+x-backend-env: &backend-env
+  PORT: 8000
+  JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+  DATABASE_URL: postgresql://${DB_USER:-choice_user}:${DB_PASSWORD:-choice_password}@postgres:5432/${DB_NAME:-choice_db}
+  RABBITMQ_HOST: ${RABBITMQ_HOST:-rabbitmq}
+  RABBITMQ_PORT: ${RABBITMQ_PORT:-5672}
+  RABBITMQ_USER: ${RABBITMQ_USER:-guest}
+  RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-guest}
+  RABBITMQ_ENABLED: ${RABBITMQ_ENABLED:-false}
+  VONAGE_API_KEY: ${VONAGE_API_KEY:-}
+  VONAGE_API_SECRET: ${VONAGE_API_SECRET:-}
+  FIREBASE_CREDENTIALS_PATH: ${FIREBASE_CREDENTIALS_PATH:-}
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: choice_postgres
+    restart: always
+    environment:
+      POSTGRES_USER: ${DB_USER:-choice_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-choice_password}
+      POSTGRES_DB: ${DB_NAME:-choice_db}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-choice_user} -d ${DB_NAME:-choice_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - choice_network
+
+  # RabbitMQ (optional, for event-driven features)
+  rabbitmq:
+    image: rabbitmq:3-alpine
+    container_name: choice_rabbitmq
+    restart: always
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-guest}
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: rabbitmq-diagnostics -q ping
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - choice_network
+    profiles:
+      - with_rabbitmq
+
+  # Authentication Service (Port 8001)
+  auth_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: authentication
+    container_name: choice_auth
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8001:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - choice_network
+
+  # Client Service (Port 8002)
+  client_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: client_service
+    container_name: choice_client
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8002:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - choice_network
+
+  # Company Service (Port 8003)
+  company_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: company_service
+    container_name: choice_company
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8003:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - choice_network
+
+  # Category Service (Port 8004)
+  category_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: category_service
+    container_name: choice_category
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8004:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - choice_network
+
+  # Ordering Service (Port 8005)
+  ordering_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: ordering
+    container_name: choice_ordering
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8005:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - choice_network
+
+  # Chat Service (Port 8006)
+  chat_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: chat
+    container_name: choice_chat
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8006:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - choice_network
+
+  # Review Service (Port 8007)
+  review_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: review_service
+    container_name: choice_review
+    restart: always
+    environment:
+      <<: *backend-env
+    ports:
+      - "8007:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      auth_service:
+        condition: service_started
+    networks:
+      - choice_network
+
+  # File Service (Port 8008)
+  file_service:
+    build:
+      context: ./backend_fastapi
+      dockerfile: Dockerfile
+      args:
+        SERVICE_NAME: file_service
+    container_name: choice_file
+    restart: always
+    environment:
+      <<: *backend-env
+      FILE_UPLOAD_PATH: /app/uploads
+    volumes:
+      - file_uploads:/app/uploads
+    ports:
+      - "8008:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - choice_network
+
+  # Optional static frontend host. Backend traffic still uses direct ports.
+  nginx:
+    image: nginx:alpine
+    container_name: choice_nginx
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./client_app_flutter/build/web:/usr/share/nginx/html:ro
+    networks:
+      - choice_network
+    profiles:
+      - web
+
+  # Optional Flutter web build that writes to client_app_flutter/build/web.
+  flutter_build:
+    image: ghcr.io/cirruslabs/flutter:3.24.0
+    container_name: choice_flutter_build
+    volumes:
+      - ./client_app_flutter:/app
+    working_dir: /app
+    command: >
+      sh -c "flutter build web 
+      --dart-define=USE_REMOTE_API=true 
+      --dart-define=API_HOST=${API_HOST:-localhost} 
+      --dart-define=API_SCHEME=${API_SCHEME:-http} 
+      --release"
+    profiles:
+      - build
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+  file_uploads:
+
+networks:
+  choice_network:
+    driver: bridge

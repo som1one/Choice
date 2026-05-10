@@ -3,13 +3,14 @@
 import 'package:flutter/material.dart';
 import '../models/inquiry_model.dart';
 import '../services/inquiry_service.dart';
-import 'company_inquiries_screen.dart';
 import '../utils/auth_guard.dart';
 import '../services/auth_service.dart';
 import '../services/remote_company_service.dart';
 import '../services/remote_ordering_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
+import '../navigation/company_tab_navigator.dart';
 
 class CompanyResponseScreen extends StatefulWidget {
   const CompanyResponseScreen({super.key});
@@ -197,7 +198,9 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
       if (closeAfterSave) {
         Navigator.pushAndRemoveUntil(
           context,
-          MaterialPageRoute(builder: (_) => const CompanyInquiriesScreen()),
+          MaterialPageRoute(
+            builder: (_) => const CompanyTabNavigator(initialIndex: 0),
+          ),
           (route) => false,
         );
       }
@@ -263,6 +266,10 @@ class _CompanyResponseScreenState extends State<CompanyResponseScreen> {
         : double.tryParse(companyRatingRaw?.toString() ?? '') ?? 0.0;
 
     return Scaffold(
+      bottomNavigationBar: const PersistentRoleBottomNav(
+        type: RoleBottomNavType.company,
+        currentIndex: 0,
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(

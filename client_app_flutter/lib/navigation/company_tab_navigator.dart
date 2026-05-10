@@ -5,15 +5,23 @@ import '../screens/company_orders_screen.dart';
 import '../screens/company_settings_screen.dart';
 
 class CompanyTabNavigator extends StatefulWidget {
-  const CompanyTabNavigator({super.key});
+  final int initialIndex;
+
+  const CompanyTabNavigator({super.key, this.initialIndex = 0});
 
   @override
   State<CompanyTabNavigator> createState() => _CompanyTabNavigatorState();
 }
 
 class _CompanyTabNavigatorState extends State<CompanyTabNavigator> {
-  int _currentIndex = 0;
+  late int _currentIndex;
   int _unreadMessagesCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _currentIndex = widget.initialIndex;
+  }
 
   void _onTabTapped(int index) {
     setState(() {

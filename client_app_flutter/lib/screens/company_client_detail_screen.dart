@@ -11,6 +11,8 @@ import 'chat_screen.dart';
 import '../services/auth_service.dart';
 import '../widgets/choice_logo_icon.dart';
 import '../widgets/profile_corner_icon.dart';
+import '../widgets/persistent_role_bottom_nav.dart';
+import '../widgets/review_phrase_dialog.dart';
 
 class CompanyClientDetailScreen extends StatefulWidget {
   final Map<String, dynamic> order;
@@ -80,6 +82,53 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       return raw;
     }
     return '${ApiConfig.fileBaseUrl}/api/objects/$raw';
+  }
+
+  int? _resolveOrderId() {
+    final rawOrderId = widget.order['id'] ?? widget.order['orderId'];
+    if (rawOrderId is num) {
+      return rawOrderId.toInt();
+    }
+    return int.tryParse(rawOrderId?.toString() ?? '');
+  }
+
+  int? _resolveOrderRequestId() {
+    final rawOrderRequestId =
+        widget.order['order_request_id'] ?? widget.order['orderRequestId'];
+    if (rawOrderRequestId is num) {
+      return rawOrderRequestId.toInt();
+    }
+    return int.tryParse(rawOrderRequestId?.toString() ?? '');
+  }
+
+  void _applyOrderSnapshot(Map<String, dynamic> snapshot) {
+    widget.order
+      ..clear()
+      ..addAll(snapshot);
+  }
+
+  Future<void> _reloadOrderFromServer({Map<String, dynamic>? fallback}) async {
+    final orderId = _resolveOrderId();
+    if (orderId == null) {
+      if (fallback != null) {
+        _applyOrderSnapshot(fallback);
+      }
+      return;
+    }
+
+    final freshOrder = await _orderingService.getOrderById(
+      orderId,
+      orderRequestId: _resolveOrderRequestId(),
+    );
+
+    if (freshOrder != null) {
+      _applyOrderSnapshot(freshOrder);
+      return;
+    }
+
+    if (fallback != null) {
+      _applyOrderSnapshot(fallback);
+    }
   }
 
   Future<void> _loadClientData() async {
@@ -185,7 +234,11 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
     }
   }
 
-  Future<void> _sendClientReview({required int grade, String? text}) async {
+  Future<void> _sendClientReview({
+    required int grade,
+    int? criterionId,
+    String? text,
+  }) async {
     final clientId = _resolveClientId();
     if (clientId == null || _isSubmittingReview) return;
 
@@ -198,6 +251,7 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       final result = await reviewService.sendReview(
         guid: clientId.toString(),
         grade: grade,
+        criterionId: criterionId,
         text: text,
       );
 
@@ -235,7 +289,33 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
     }
   }
 
-  void _showLeaveReviewDialog() {
+  Future<void> _showLeaveReviewDialog() async {
+    final reviewService = RemoteReviewService();
+    final phrases = await reviewService.getReviewPhrases();
+    if (!mounted) return;
+    if (phrases.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Для отзывов пока не настроены фразы')),
+      );
+      return;
+    }
+
+    final selection = await showReviewPhraseDialog(
+      context: context,
+      title: 'Оценить клиента',
+      phrases: phrases,
+    );
+    if (selection == null) {
+      return;
+    }
+
+    await _sendClientReview(
+      grade: selection.grade,
+      criterionId: selection.criterionId,
+      text: selection.text,
+    );
+    return;
+
     int grade = 5;
     final textController = TextEditingController();
 
@@ -407,10 +487,7 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       return;
     }
 
-    final orderIdRaw = widget.order['id'] ?? widget.order['orderId'];
-    final orderId = orderIdRaw is num
-        ? orderIdRaw.toInt()
-        : int.tryParse(orderIdRaw?.toString() ?? '');
+    final orderId = _resolveOrderId();
     if (orderId == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -449,15 +526,7 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
       final result = await _orderingService.finish(orderId);
       if (!mounted) return;
       if (result != null) {
-        widget.order['status'] = parseOrderStatus(result);
-        widget.order['is_date_confirmed'] =
-            result['is_date_confirmed'] ??
-            result['isDateConfirmed'] ??
-            widget.order['is_date_confirmed'];
-        widget.order['is_enrolled'] =
-            result['is_enrolled'] ??
-            result['isEnrolled'] ??
-            widget.order['is_enrolled'];
+        await _reloadOrderFromServer(fallback: result);
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Заказ завершен')));
@@ -520,6 +589,10 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
         '';
 
     return Scaffold(
+      bottomNavigationBar: const PersistentRoleBottomNav(
+        type: RoleBottomNavType.company,
+        currentIndex: 1,
+      ),
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(56.0),
         child: Container(
@@ -649,12 +722,12 @@ class _CompanyClientDetailScreenState extends State<CompanyClientDetailScreen> {
                       ],
                     ],
                   ),
-                  if (_canLeaveReview) ...[
+                  if (isFinished) ...[
                     const SizedBox(height: 6),
                     TextButton.icon(
-                      onPressed: _isSubmittingReview
-                          ? null
-                          : _showLeaveReviewDialog,
+                      onPressed: _canLeaveReview && !_isSubmittingReview
+                          ? _showLeaveReviewDialog
+                          : null,
                       icon: _isSubmittingReview
                           ? const SizedBox(
                               width: 14,

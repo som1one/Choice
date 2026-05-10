@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from common.database import get_db
 from common.dependencies import get_current_user, require_admin
+from services.company_service.models_rating import RatingCriterion
 from ..models import Review
 from ..schemas import ReviewResponse, CreateReviewRequest, EditReviewRequest
 from ..repositories import ReviewRepository
@@ -64,11 +65,34 @@ async def send_review(
     except HTTPException:
         raise
     
+    review_text = request.text
+    if request.criterion_id is not None:
+        criterion = db.query(RatingCriterion).filter(
+            RatingCriterion.id == request.criterion_id
+        ).first()
+        if not criterion or not criterion.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selected review phrase is unavailable"
+            )
+        if criterion.grade != request.grade:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Selected review phrase does not match the grade"
+            )
+        review_text = criterion.text
+
+    if review_text is None or not review_text.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Review text is required"
+        )
+
     repo = ReviewRepository(db)
     review = Review(
         sender_id=sender_id,
         receiver_id=request.guid,
-        text=request.text,
+        text=review_text.strip(),
         grade=request.grade,
         photo_uris=request.photo_uris or []
     )

@@ -224,9 +224,12 @@ class _ChatScreenState extends State<ChatScreen> {
 
     try {
       final messages = await _chatService.getMessages(widget.userId);
+      final currentUserId =
+          _currentUserId ?? await AuthService.getCurrentUserId();
       if (!mounted) return;
 
       setState(() {
+        _currentUserId = currentUserId;
         _messages = messages ?? [];
         _isLoading = false;
       });
@@ -235,7 +238,13 @@ class _ChatScreenState extends State<ChatScreen> {
       for (final msg in _messages) {
         final isRead = msg['is_read'] == true || msg['isRead'] == true;
         final id = msg['id'] as int?;
-        if (!isRead && id != null) {
+        final receiverId =
+            (msg['receiver_id'] ?? msg['receiverId'])?.toString();
+        final isIncomingForCurrentUser =
+            currentUserId != null &&
+            currentUserId.isNotEmpty &&
+            receiverId == currentUserId;
+        if (!isRead && id != null && isIncomingForCurrentUser) {
           _chatService.readMessage(id);
         }
       }
@@ -693,7 +702,7 @@ class _ChatScreenState extends State<ChatScreen> {
         ],
       ),
       floatingActionButton:
-          (_userType == UserType.client || _userType == UserType.company)
+          false
           ? FutureBuilder<bool>(
               future: _reviewService.canSendReview(widget.userId),
               builder: (context, snapshot) {

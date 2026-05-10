@@ -5,6 +5,7 @@ import '../utils/auth_guard.dart';
 import '../utils/auth_input_validator.dart';
 import '../navigation/company_tab_navigator.dart';
 import 'fill_company_data_screen.dart';
+import '../widgets/service_agreement_dialog.dart';
 
 class CompanyRegistrationScreen extends StatefulWidget {
   final String? email;
@@ -32,6 +33,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
   bool _emailValidationError = false;
   bool _weakPasswordError = false;
   bool _passwordsNotMatchedError = false;
+  bool _acceptedTerms = false;
 
   @override
   void initState() {
@@ -96,6 +98,10 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         !_emailValidationError &&
         !_weakPasswordError &&
         !_passwordsNotMatchedError;
+  }
+
+  bool _canSubmitCompany() {
+    return _isFormValid() && _acceptedTerms;
   }
 
   @override
@@ -297,12 +303,24 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
                       ),
                     ),
                   ],
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: MediaQuery.of(context).size.width * 0.52,
+                    child: ServiceAgreementCheckbox(
+                      accepted: _acceptedTerms,
+                      onChanged: (value) {
+                        setState(() {
+                          _acceptedTerms = value;
+                        });
+                      },
+                    ),
+                  ),
                   const SizedBox(height: 32),
                   SizedBox(
                     width: MediaQuery.of(context).size.width * 0.52,
                     child: _buildActionButton(
                       'Регистрация компании',
-                      isEnabled: _isFormValid(),
+                      isEnabled: _canSubmitCompany(),
                     ),
                   ),
                 ],
@@ -401,6 +419,15 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
       return;
     }
 
+    if (!_acceptedTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Подтвердите согласие с условиями сервиса'),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _emailError = false;
     });
@@ -415,6 +442,7 @@ class _CompanyRegistrationScreenState extends State<CompanyRegistrationScreen> {
         phoneNumber: _phoneController.text.trim().isNotEmpty
             ? _phoneController.text.trim()
             : '',
+        acceptedTerms: _acceptedTerms,
         companyType: _companyType,
       );
       // Регистрация уже возвращает токен, логин не нужен

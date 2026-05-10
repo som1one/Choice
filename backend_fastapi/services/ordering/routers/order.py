@@ -704,15 +704,18 @@ async def add_review(
     # Ищем завершенный заказ между клиентом и компанией
     orders = await repo.get_by_users(normalized_client_id, normalized_company_id)
     
+    finished_order_found = False
+
     for order in orders:
         # Проверяем, что заказ завершен
         if order.status == OrderStatus.FINISHED.value:
+            finished_order_found = True
             if not order.reviews:
                 order.reviews = []
 
             already_left = reviewer_marker in order.reviews
             if already_left:
-                return {"success": False, "message": "Review already added"}
+                continue
 
             # Режим reserve=true: резервируем право отзыва (используется review-service)
             if reserve:
@@ -725,6 +728,9 @@ async def add_review(
             # Режим reserve=false: только проверка (используется frontend)
             return {"success": True, "message": "Review can be added"}
     
+    if finished_order_found:
+        return {"success": False, "message": "Review already added"}
+
     return {"success": False, "message": "No finished order found or review already added"}
 
 @router.put("/addReviewToOrder")

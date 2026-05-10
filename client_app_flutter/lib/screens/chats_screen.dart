@@ -18,6 +18,7 @@ class _ChatsScreenState extends State<ChatsScreen> {
   bool _isLoading = true;
   bool _isRefreshing = false;
   bool _isCompany = false;
+  String? _currentUserId;
 
   @override
   void initState() {
@@ -28,9 +29,11 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
   Future<void> _checkUserType() async {
     final isCompany = await AuthService.isCompany();
+    final currentUserId = await AuthService.getCurrentUserId();
     if (mounted) {
       setState(() {
         _isCompany = isCompany;
+        _currentUserId = currentUserId;
       });
     }
   }
@@ -86,7 +89,13 @@ class _ChatsScreenState extends State<ChatsScreen> {
     for (final chat in _chats) {
       final messages = chat['messages'] as List<dynamic>? ?? [];
       for (final msg in messages) {
-        if (msg['is_read'] == false || msg['isRead'] == false) {
+        final isUnread = msg['is_read'] == false || msg['isRead'] == false;
+        final receiverId = (msg['receiver_id'] ?? msg['receiverId'])?.toString();
+        if (
+            isUnread &&
+            _currentUserId != null &&
+            _currentUserId!.isNotEmpty &&
+            receiverId == _currentUserId) {
           unreadCount++;
         }
       }
@@ -163,7 +172,16 @@ class _ChatsScreenState extends State<ChatsScreen> {
                         // Подсчитываем непрочитанные сообщения
                         int unreadCount = 0;
                         for (final msg in messages) {
-                          if (msg['is_read'] == false || msg['isRead'] == false) {
+                          final isUnread =
+                              msg['is_read'] == false || msg['isRead'] == false;
+                          final receiverId =
+                              (msg['receiver_id'] ?? msg['receiverId'])
+                                  ?.toString();
+                          if (
+                              isUnread &&
+                              _currentUserId != null &&
+                              _currentUserId!.isNotEmpty &&
+                              receiverId == _currentUserId) {
                             unreadCount++;
                           }
                         }

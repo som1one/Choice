@@ -76,6 +76,7 @@ class RegisterRequest(BaseModel):
     city: str
     phone_number: Optional[str] = None
     device_token: Optional[str] = None
+    accepted_terms: bool = False
     type: UserType
     
     @field_validator('phone_number', mode='before')
@@ -94,6 +95,13 @@ class RegisterRequest(BaseModel):
     def validate_type(cls, v):
         if v == UserType.ADMIN:
             raise ValueError('Admin type cannot be used for registration')
+        return v
+
+    @field_validator('accepted_terms')
+    @classmethod
+    def validate_accepted_terms(cls, v):
+        if v is not True:
+            raise ValueError('Terms must be accepted')
         return v
 
 class ResetPasswordRequest(BaseModel):

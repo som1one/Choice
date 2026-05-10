@@ -173,33 +173,54 @@ class RemoteAdminService {
     return json != null;
   }
 
-  Future<List<Map<String, dynamic>>?> getRatingCriteria() async {
+  Future<List<Map<String, dynamic>>?> getRatingCriteria({
+    int? grade,
+    bool? isActive,
+  }) async {
+    final query = <String>[
+      if (grade != null) 'grade=$grade',
+      if (isActive != null) 'is_active=$isActive',
+    ].join('&');
     final json = await ApiClient.getJson(
-      '/api/rating-criteria/',
+      '/api/rating-criteria/${query.isEmpty ? '' : '?$query'}',
       baseUrl: ApiConfig.companyBaseUrl,
     );
     return _readList(json);
   }
 
   Future<Map<String, dynamic>?> createRatingCriterion({
-    required String name,
-    String? description,
+    required int grade,
+    required String text,
+    int sortOrder = 0,
+    bool isActive = true,
   }) async {
     return ApiClient.postJson(
       '/api/rating-criteria/',
-      {'name': name, 'description': description},
+      {
+        'grade': grade,
+        'text': text,
+        'sort_order': sortOrder,
+        'is_active': isActive,
+      },
       baseUrl: ApiConfig.companyBaseUrl,
     );
   }
 
   Future<Map<String, dynamic>?> updateRatingCriterion({
     required int id,
-    required String name,
-    String? description,
+    required int grade,
+    required String text,
+    int sortOrder = 0,
+    bool isActive = true,
   }) async {
     return ApiClient.putJson(
       '/api/rating-criteria/$id',
-      {'name': name, 'description': description},
+      {
+        'grade': grade,
+        'text': text,
+        'sort_order': sortOrder,
+        'is_active': isActive,
+      },
       baseUrl: ApiConfig.companyBaseUrl,
     );
   }

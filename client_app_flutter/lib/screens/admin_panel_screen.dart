@@ -874,8 +874,9 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     final ok = await _remote.deleteCompanyByGuid(guid);
     if (ok && mounted) {
       setState(() {
-        _selectedCompany = null;
+        _resetCompanySelectionState();
       });
+      await _saveCompanySettings();
     }
     _showMessage(ok ? 'Компания удалена' : 'Не удалось удалить компанию');
   }
@@ -1007,6 +1008,199 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     );
   }
 
+  Future<Map<String, dynamic>?> _showRatingCriterionDialog({
+    required String title,
+    int initialGrade = 5,
+    String initialText = '',
+    int initialSortOrder = 0,
+    bool initialIsActive = true,
+  }) {
+    final textController = TextEditingController(text: initialText);
+    final sortController = TextEditingController(
+      text: initialSortOrder.toString(),
+    );
+    int selectedGrade = initialGrade;
+    bool isActive = initialIsActive;
+
+    return showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(title),
+          content: SizedBox(
+            width: 420,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<int>(
+                  initialValue: selectedGrade,
+                  decoration: const InputDecoration(labelText: 'Оценка'),
+                  items: List.generate(
+                    5,
+                    (index) => DropdownMenuItem<int>(
+                      value: index + 1,
+                      child: Text('${index + 1}'),
+                    ),
+                  ),
+                  onChanged: (value) {
+                    if (value == null) return;
+                    setDialogState(() {
+                      selectedGrade = value;
+                    });
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: textController,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Фраза',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: sortController,
+                  decoration: const InputDecoration(
+                    labelText: 'Порядок',
+                    border: OutlineInputBorder(),
+                  ),
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  value: isActive,
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Активна для пользователей'),
+                  onChanged: (value) {
+                    setDialogState(() {
+                      isActive = value ?? true;
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Отмена'),
+            ),
+            TextButton(
+              onPressed: () {
+                final text = textController.text.trim();
+                if (text.isEmpty) {
+                  return;
+                }
+                Navigator.pop(context, {
+                  'grade': selectedGrade,
+                  'text': text,
+                  'sort_order':
+                      int.tryParse(sortController.text.trim()) ?? initialSortOrder,
+                  'is_active': isActive,
+                });
+              },
+              child: const Text('Сохранить'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _resetCompanySelectionState() {
+    _selectedCompany = null;
+    _companyPhotoPath = null;
+    _companyLogoPath = null;
+    _socialLinks.clear();
+    _selectedCardColor = const Color(0xFFB8E986);
+    for (final controller in _companyControllers.values) {
+      controller.clear();
+    }
+  }
+
+  List<Map<String, dynamic>> _criteriaForGrade(int grade) {
+    final items = _ratingCriteria.where((item) {
+      return int.tryParse(item['grade']?.toString() ?? '') == grade;
+    }).toList();
+    items.sort((a, b) {
+      final left = int.tryParse(a['sort_order']?.toString() ?? '') ?? 0;
+      final right = int.tryParse(b['sort_order']?.toString() ?? '') ?? 0;
+      if (left != right) return left.compareTo(right);
+      final leftId = int.tryParse(a['id']?.toString() ?? '') ?? 0;
+      final rightId = int.tryParse(b['id']?.toString() ?? '') ?? 0;
+      return leftId.compareTo(rightId);
+    });
+    return items;
+  }
+
+  Widget _buildRatingCriteriaSection(int grade) {
+    final items = _criteriaForGrade(grade);
+    final title = grade == 1 ? '1 звезда' : '$grade звезды';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.blue.shade50,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: () => _createRatingCriterion(initialGrade: grade),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('Добавить'),
+              ),
+            ],
+          ),
+          if (items.isEmpty)
+            const Text(
+              'Фраз пока нет',
+              style: TextStyle(color: Colors.black54),
+            )
+          else
+            ...items.map(
+              (item) => Padding(
+                padding: const EdgeInsets.only(top: 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        (item['text'] ?? '').toString(),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => _editRatingCriterion(item),
+                      icon: const Icon(Icons.edit_outlined, size: 20),
+                    ),
+                    IconButton(
+                      onPressed: () => _deleteRatingCriterion(item),
+                      icon: const Icon(Icons.delete_outline, size: 20),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _createCategory() async {
     _showEditItemDialog(
       title: 'Добавить услугу на главный экран',
@@ -1079,11 +1273,37 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
     _showMessage(ok ? 'Услуга удалена' : 'Не удалось удалить услугу');
   }
 
-  Future<void> _createRatingCriterion() async {
+  Future<void> _createRatingCriterion({int initialGrade = 5}) async {
+    final form = await _showRatingCriterionDialog(
+      title: 'Добавить фразу для отзыва',
+      initialGrade: initialGrade,
+    );
+    if (form == null) return;
+
+    final created = await _remote.createRatingCriterion(
+      grade: form['grade'] as int,
+      text: form['text'] as String,
+      sortOrder: form['sort_order'] as int,
+      isActive: form['is_active'] as bool,
+    );
+    if (created == null || !mounted) {
+      _showMessage('Не удалось добавить фразу');
+      return;
+    }
+    setState(() {
+      _ratingCriteria.add(created);
+    });
+    await _saveCompanySettings();
+    _showMessage('Фраза добавлена');
+    return;
+
     _showEditItemDialog(
       title: 'Добавить фразу для отзыва',
       onSave: (value) async {
-        final created = await _remote.createRatingCriterion(name: value);
+        final created = await _remote.createRatingCriterion(
+          grade: initialGrade,
+          text: value,
+        );
         if (created == null || !mounted) {
           _showMessage('Не удалось добавить фразу');
           return;
@@ -1100,11 +1320,52 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
   Future<void> _editRatingCriterion(Map<String, dynamic> criterion) async {
     final id = int.tryParse(criterion['id']?.toString() ?? '');
     if (id == null) return;
+    final form = await _showRatingCriterionDialog(
+      title: 'Редактировать фразу',
+      initialGrade: int.tryParse(criterion['grade']?.toString() ?? '') ?? 5,
+      initialText: (criterion['text'] ?? '').toString(),
+      initialSortOrder:
+          int.tryParse(criterion['sort_order']?.toString() ?? '') ?? 0,
+      initialIsActive: criterion['is_active'] != false,
+    );
+    if (form == null) return;
+
+    final updated = await _remote.updateRatingCriterion(
+      id: id,
+      grade: form['grade'] as int,
+      text: form['text'] as String,
+      sortOrder: form['sort_order'] as int,
+      isActive: form['is_active'] as bool,
+    );
+    if (updated == null || !mounted) {
+      _showMessage('Не удалось обновить фразу');
+      return;
+    }
+    setState(() {
+      final index = _ratingCriteria.indexWhere(
+        (item) => item['id']?.toString() == id.toString(),
+      );
+      if (index >= 0) {
+        _ratingCriteria[index] = {
+          ..._ratingCriteria[index],
+          ...updated,
+          'id': id,
+        };
+      }
+    });
+    await _saveCompanySettings();
+    _showMessage('Фраза обновлена');
+    return;
+
     _showEditItemDialog(
       title: 'Редактировать фразу',
-      initialValue: (criterion['name'] ?? '').toString(),
+      initialValue: (criterion['text'] ?? '').toString(),
       onSave: (value) async {
-        final updated = await _remote.updateRatingCriterion(id: id, name: value);
+        final updated = await _remote.updateRatingCriterion(
+          id: id,
+          grade: int.tryParse(criterion['grade']?.toString() ?? '') ?? 5,
+          text: value,
+        );
         if (updated == null || !mounted) {
           _showMessage('Не удалось обновить фразу');
           return;
@@ -1118,7 +1379,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
               ..._ratingCriteria[index],
               ...updated,
               'id': id,
-              'name': value,
+              'text': value,
             };
           }
         });
@@ -1388,7 +1649,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         const SizedBox(height: 10),
         _buildActionPair(
           leftText: 'Добавить фразу',
-          onLeftTap: _createRatingCriterion,
+          onLeftTap: () => _createRatingCriterion(),
           rightText: 'Обновить фразы',
           onRightTap: () async {
             final criteria = await _remote.getRatingCriteria();
@@ -1399,7 +1660,8 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
             }
           },
         ),
-        ..._ratingCriteria.asMap().entries.map(
+        ...List.generate(5, (index) => _buildRatingCriteriaSection(index + 1)),
+        if (false) ..._ratingCriteria.asMap().entries.map(
           (entry) => Padding(
             padding: const EdgeInsets.only(bottom: 8),
             child: Row(
@@ -1600,7 +1862,7 @@ class _AdminPanelScreenState extends State<AdminPanelScreen> {
         child: _buildTopBar(),
       ),
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFE7D1FF),
+        backgroundColor: const Color(0xFF2D81E0),
         onPressed: _saveCurrentMode,
         child: _isSaving
             ? const SizedBox(
