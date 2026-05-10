@@ -19,7 +19,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # complete services tree must be present in every image.
 COPY common/ ./common/
 COPY services/ ./services/
-COPY etc/ ./etc/
+# etc/ is not tracked in git; file_service creates upload dirs at runtime via FILE_UPLOAD_PATH volume
 
 # Build argument for service name
 ARG SERVICE_NAME
